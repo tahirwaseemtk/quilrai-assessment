@@ -33,6 +33,10 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
+      # Install scripts are disabled (.npmrc), so prove the bundled native binary loads.
+      - name: Smoke-test better-sqlite3 native binding
+        shell: bash
+        run: node -e "const Database = require('better-sqlite3'); new Database(':memory:').close()"
       - run: npm run check
 
   audit:
@@ -47,7 +51,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - run: npm ci --ignore-scripts
+      - run: npm ci
       - run: npm audit --omit=dev --audit-level=high
 
   # Single stable status name for branch protection, independent of the matrix.
