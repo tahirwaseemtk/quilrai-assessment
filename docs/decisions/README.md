@@ -12,6 +12,8 @@ One file per decision, named `NNN-short-title.md`. Source is `[Spec]` when the a
 | [006](006-lf-line-endings.md)           | LF line endings enforced via `.gitattributes`          | Decided | Accepted |
 | [007](007-env-file-loading.md)          | Env loading via Node `--env-file-if-exists`            | Decided | Accepted |
 | [008](008-node-22-typescript-6.md)      | Node 22.12+ baseline, TypeScript pinned to 6.0         | Decided | Accepted |
+| [009](009-ci-merge-gate.md)             | CI merge gate on every PR (`ci-ok` required check)     | Decided | Accepted |
+| [010](010-disable-install-scripts.md)   | Disable dependency install scripts via `.npmrc`        | Decided | Accepted |
 
 ## Template
 
