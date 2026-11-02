@@ -29,4 +29,4 @@ The SDK protocol layer copies any thrown error with a numeric `code` to the wire
 
 ## Consequences
 
-Error messages on the wire are a closed set. New field-level messages (sub-task 1.4) must be added to the allowlist in `src/errors.ts`, or they are replaced with the canonical message.
+Error messages on the wire are a closed set. New field-level messages (sub-task 1.4) are composed from the fixed fragments in `src/field-errors.ts` and checked by its composition rule (ADR 016), or they are replaced with the canonical message.

@@ -50,11 +50,25 @@ const toolCallParamsSchema = z.looseObject({
   task: z.never().optional(),
 });
 
+// The SDK (and Zod) rebuild `arguments` and silently drop an own __proto__ key, which JSON.parse
+// creates, so the strict tool schemas would never report it as unknown. Checked on the raw object.
+const noProtoArgumentKey: Validator = {
+  safeParse(value) {
+    const params = (value as { params?: unknown }).params;
+    const args = (params as { arguments?: unknown } | undefined)?.arguments;
+    const hasKey = typeof args === 'object' && args !== null && Object.hasOwn(args, '__proto__');
+    return { success: !hasKey };
+  },
+};
+
 const methodValidators = new Map<string, readonly Validator[]>([
   ['initialize', [InitializeRequestSchema]],
   ['ping', [PingRequestSchema]],
   ['tools/list', [ListToolsRequestSchema]],
-  ['tools/call', [CallToolRequestSchema, z.looseObject({ params: toolCallParamsSchema })]],
+  [
+    'tools/call',
+    [CallToolRequestSchema, z.looseObject({ params: toolCallParamsSchema }), noProtoArgumentKey],
+  ],
 ]);
 
 // Anything passed on must also satisfy the SDK's own message schema: the SDK silently drops

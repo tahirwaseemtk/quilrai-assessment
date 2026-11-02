@@ -1,9 +1,24 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { CustomerRepository, RefundFailure } from './customer-repository.js';
+import { ArgumentMessage, type ArgumentField } from './field-errors.js';
 import type { Logger } from './logger.js';
 import { GetCustomerRecordArgs, TriggerRefundArgs } from './schemas.js';
 import { defineTool, type ToolDefinition } from './server.js';
 import { getCustomerRecordInputSchema, triggerRefundInputSchema } from './tool-schemas.js';
+
+const customerIdField: ArgumentField = {
+  name: 'customer_id',
+  invalid: ArgumentMessage.CustomerId,
+  required: ArgumentMessage.CustomerIdRequired,
+};
+
+export const customerRecordFields: readonly ArgumentField[] = [customerIdField];
+
+export const refundFields: readonly ArgumentField[] = [
+  customerIdField,
+  { name: 'amount', invalid: ArgumentMessage.Amount, required: ArgumentMessage.AmountRequired },
+  { name: 'reason', invalid: ArgumentMessage.Reason, required: ArgumentMessage.ReasonRequired },
+];
 
 export const FailureMessage: Readonly<Record<RefundFailure, string>> = {
   not_found: 'Customer not found',
@@ -30,6 +45,7 @@ export function createTools(repository: CustomerRepository, logger: Logger): Too
       inputSchema: getCustomerRecordInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: false },
       args: GetCustomerRecordArgs,
+      argumentFields: customerRecordFields,
       handler: ({ customer_id }) => {
         const customer = repository.find(customer_id);
         return customer ? success(customer) : failure('not_found');
@@ -42,6 +58,7 @@ export function createTools(repository: CustomerRepository, logger: Logger): Too
       inputSchema: triggerRefundInputSchema,
       annotations: { destructiveHint: true, idempotentHint: false, openWorldHint: false },
       args: TriggerRefundArgs,
+      argumentFields: refundFields,
       handler: ({ customer_id, amount, reason }) => {
         // The schema guarantees at most 2 decimals; rounding removes float noise from * 100.
         const outcome = repository.refund(customer_id, Math.round(amount * 100), reason);
