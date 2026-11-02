@@ -113,6 +113,7 @@ Task folders: `task1-mcp-server`, `task2-mcp-gateway`, `task3-stream-guardrail`,
 - Claude creates sub-task branches and commits only after I approve the diff. Claude never pushes, opens PRs, or merges.
 - Commit messages: `task1.2: validate customer_id format`.
 - Sub-task branches merge into `taskN/main` through a PR with `--no-ff`. Only finished, reviewed tasks merge into `main`.
+- When a branch is ready to push, Claude writes the PR description using every section of `.github/pull_request_template.md`, filled from the actual diff, test output, ADRs, and AC matrix.
 
 ## Sub-task loop
 
@@ -122,6 +123,7 @@ Task folders: `task1-mcp-server`, `task2-mcp-gateway`, `task3-stream-guardrail`,
 4. Review: `/code-review` on the diff, then the specialist reviewer (`mcp-protocol-reviewer` or `security-reviewer`), then `spec-reviewer`.
 5. Update the task doc (sub-task log, AC matrix) and add an ADR for any decision.
 6. Show the diff and proposed commit message; commit after approval.
+7. Write the filled-in PR description for the branch.
 
 ## Documentation
 
