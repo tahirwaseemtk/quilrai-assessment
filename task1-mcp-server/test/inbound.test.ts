@@ -44,7 +44,7 @@ describe('classifyInbound: valid messages', () => {
   });
 
   it('strips a leading byte order mark', () => {
-    expect(classifyInbound('﻿{"jsonrpc":"2.0","id":1,"method":"ping"}')).toEqual({
+    expect(classifyInbound('\uFEFF{"jsonrpc":"2.0","id":1,"method":"ping"}')).toEqual({
       kind: 'message',
       message: { jsonrpc: '2.0', id: 1, method: 'ping' },
     });

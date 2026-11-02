@@ -17,6 +17,7 @@ One file per decision, named `NNN-short-title.md`. Source is `[Spec]` when the a
 | [011](011-project-review-subagents.md)    | Read-only project review subagents, dry-run verified   | Decided        | Accepted |
 | [012](012-low-level-server-rpc-errors.md) | Low-level SDK `Server` with fixed-message `RpcError`   | Spec + Decided | Accepted |
 | [013](013-custom-line-transport.md)       | Custom stdio line transport                            | Spec + Decided | Accepted |
+| [014](014-tool-argument-schemas.md)       | Tool argument schemas and hand-written JSON Schema     | Spec + Decided | Accepted |
 
 ## Template
 
