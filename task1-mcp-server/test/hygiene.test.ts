@@ -17,11 +17,13 @@ function sourceFiles(dir: string, { includeTests = false } = {}): string[] {
 }
 
 describe('source encoding', () => {
-  // Invisible characters typed literally are unreviewable and silently lost by some editors;
+  // Invisible, separator and replacement characters typed literally are unreviewable and silently lost by some editors;
   // write them as escapes or String.fromCodePoint instead.
   it('contains no literal invisible characters', () => {
     for (const file of sourceFiles(taskDir, { includeTests: true })) {
-      expect(readFileSync(file, 'utf8'), file).not.toMatch(/\p{Default_Ignorable_Code_Point}/u);
+      expect(readFileSync(file, 'utf8'), file).not.toMatch(
+        /[\p{Default_Ignorable_Code_Point}\u2028\u2029\uFFFD]/u,
+      );
     }
   });
 });
