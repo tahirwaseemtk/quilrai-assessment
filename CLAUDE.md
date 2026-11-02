@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 Project: QuilrAI AI Field Developer / Solutions Engineer assessment.
-A single public repo containing four independent tasks, all in TypeScript on Node 20.11+.
+A single public repo containing four independent tasks, all in TypeScript on Node 22.12+.
 
 ## Goal
 
@@ -9,7 +9,7 @@ Deliver four working, tested solutions that a reviewer can run with one npm comm
 
 ## Tech stack
 
-- Runtime: Node 20.11+, TypeScript (strict mode, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`)
+- Runtime: Node 22.12+, TypeScript 6.0 (strict mode, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`). TypeScript stays on 6.0 until `typescript-eslint` supports 7 (ADR 008).
 - Runner: tsx for scripts, vitest for tests
 - Lint/format: ESLint (typescript-eslint) and Prettier
 - Validation: Zod at every external input boundary
@@ -41,11 +41,13 @@ Task folders: `task1-mcp-server`, `task2-mcp-gateway`, `task3-stream-guardrail`,
 - `npm run task2:mock`, `task3:provider`, `task4:providers`: start local stubs for manual demos
 - `npm test`, `npm run test:taskN`: run vitest
 - `npm run typecheck`, `npm run lint`, `npm run format`
-- `npm run check`: typecheck + lint + test. Run it before saying anything is done.
+- `npm run check`: typecheck + lint + format check + test. Run it before saying anything is done.
+- Task and stub scripts are added in the sub-task that creates their entry file.
 
 ## Task rules
 
 ### Task 1: MCP server
+
 - stdout is reserved for JSON-RPC only. Never use `console.log`, `console.info`, or `process.stdout.write` for logs. Use the stderr logger.
 - Connect over stdio. If the SDK `StdioServerTransport` does not answer malformed JSON with `-32700`, use a small transport implementing the SDK `Transport` interface that does.
 - Use the low-level SDK `Server` and validate arguments with Zod in the `tools/call` handler, so invalid input returns JSON-RPC `-32602` instead of an `isError` tool result.
@@ -58,6 +60,7 @@ Task folders: `task1-mcp-server`, `task2-mcp-gateway`, `task3-stream-guardrail`,
 - Test by spawning the server and checking that every stdout line parses as JSON-RPC.
 
 ### Task 2: MCP security gateway
+
 - Read `Authorization: Bearer <token>`. Map tokens to roles through config (`GATEWAY_TOKENS`), compared in constant time. Roles: `admin`, `viewer`.
 - Missing, malformed, or unknown token: HTTP 401 with `WWW-Authenticate: Bearer`.
 - `tools/list` and other non-`tools/call` methods: forward to the downstream server unchanged, streaming the response back.
@@ -71,6 +74,7 @@ Task folders: `task1-mcp-server`, `task2-mcp-gateway`, `task3-stream-guardrail`,
 - Include a small mock downstream MCP server for testing.
 
 ### Task 3: Streaming PII redaction
+
 - Process the stream chunk by chunk with async iterators. Do not accumulate the full response.
 - Use a prefix-aware holdback: hold back only trailing text that could still become a match, capped at a maximum derived from the pattern definitions.
 - Redact emails, SSNs (`###-##-####`), and Luhn-valid 13-19 digit card numbers as `[REDACTED]`.
@@ -81,6 +85,7 @@ Task folders: `task1-mcp-server`, `task2-mcp-gateway`, `task3-stream-guardrail`,
 - Document the tradeoff between holdback size, detection coverage, and latency in the task doc.
 
 ### Task 4: Rate limiter and model fallback
+
 - Token-aware sliding window per tenant API key, default 50,000 tokens per 60 seconds, configurable.
 - Store usage in SQLite (WAL mode) with timestamped rows. Store tenant keys as SHA-256 hashes, never raw. Evict rows older than the window on each check.
 - Check-and-reserve runs in an immediate transaction. Reconcile with reported usage after the call; release the reservation if both providers fail.
