@@ -1,5 +1,7 @@
 import { spawn, type SpawnOptions } from 'node:child_process';
 import path from 'node:path';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
 export const repoRoot = path.resolve(import.meta.dirname, '../../..');
 export const serverEntry = 'task1-mcp-server/index.ts';
@@ -55,4 +57,36 @@ export function rawSession(
     });
     child.stdin?.end(lines.map((line) => `${line}\n`).join(''));
   });
+}
+
+export interface ClientSession {
+  client: Client;
+  pid: number | null;
+}
+
+// Spawns the server, connects the SDK client and always closes it, even when `run` throws.
+export async function withClient<T>(
+  run: (session: ClientSession) => Promise<T>,
+  launch: { command: string; args: string[] } = directLaunch,
+): Promise<T> {
+  const transport = new StdioClientTransport({
+    command: launch.command,
+    args: launch.args,
+    cwd: repoRoot,
+    stderr: 'pipe',
+  });
+  const client = new Client({ name: 'e2e', version: '0' });
+  // A launcher such as npm may print non-JSON lines first; the client skips them.
+  client.onerror = () => undefined;
+  await client.connect(transport);
+  try {
+    return await run({ client, pid: transport.pid });
+  } finally {
+    await client.close();
+  }
+}
+
+// Structured log lines only: Node or tsx may add their own notices to stderr.
+export function logLines(stderrLines: string[]): string[] {
+  return stderrLines.filter((line) => line.startsWith('{'));
 }

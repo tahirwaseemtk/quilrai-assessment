@@ -1,14 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { McpError } from '@modelcontextprotocol/sdk/types.js';
-import {
-  npmSilentLaunch,
-  rawSession,
-  repoRoot,
-  serverArgs,
-  serverCommand,
-} from './helpers/process.js';
+import { getCustomerRecordInputSchema, triggerRefundInputSchema } from '../src/tool-schemas.js';
+import { logLines, npmSilentLaunch, rawSession, withClient } from './helpers/process.js';
 
 type Line = {
   jsonrpc?: unknown;
@@ -16,6 +9,9 @@ type Line = {
   result?: unknown;
   error?: { code: number; message: string; data?: unknown };
 };
+
+const toolNames = ['get_customer_record', 'trigger_refund'];
+const leakPattern = /MCP error|ZodError|"issues"|\bat \S+:\d+/;
 
 const initialize =
   '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"e2e","version":"0"}}}';
@@ -28,29 +24,25 @@ function parseJsonRpcLine(line: string): Line {
   return parsed;
 }
 
+const structured = (result: unknown): Record<string, unknown> =>
+  (result as { structuredContent: Record<string, unknown> }).structuredContent;
+
+const toolCall = (id: number, name: string, args: unknown): string =>
+  JSON.stringify({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } });
+
 describe('stdio server process', () => {
   it('connects with the SDK client, lists tools and reports unknown tools', async () => {
-    const transport = new StdioClientTransport({
-      command: serverCommand,
-      args: serverArgs,
-      cwd: repoRoot,
-      stderr: 'pipe',
-    });
-    const client = new Client({ name: 'e2e', version: '0' });
-    await client.connect(transport);
-    try {
+    const pid = await withClient(async ({ client, pid }) => {
       expect(client.getServerCapabilities()?.tools).toBeDefined();
-      expect(await client.listTools()).toEqual({ tools: [] });
+      expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(toolNames);
       const error = await client.callTool({ name: 'nope' }).catch((e: unknown) => e);
       expect(error).toBeInstanceOf(McpError);
       expect((error as McpError).code).toBe(-32602);
       expect((error as McpError).message).toContain('Unknown tool');
-    } finally {
-      const pid = transport.pid;
-      await client.close();
-      expect(pid).not.toBeNull();
-      expect(() => process.kill(pid as number, 0)).toThrow();
-    }
+      return pid;
+    });
+    expect(pid).not.toBeNull();
+    expect(() => process.kill(pid as number, 0)).toThrow();
   });
 
   it('writes only JSON-RPC to stdout and only logs to stderr in a scripted session', async () => {
@@ -70,9 +62,7 @@ describe('stdio server process', () => {
 
     expect(exitCode).toBe(0);
     expect(stdoutLines).toHaveLength(9);
-    for (const line of stdoutLines) {
-      expect(line).not.toMatch(/MCP error|ZodError|issues|\bat \S+:\d+/);
-    }
+    for (const line of stdoutLines) expect(line).not.toMatch(leakPattern);
     const lines = stdoutLines.map(parseJsonRpcLine);
     const byId = (id: unknown) => lines.filter((line) => line.id === id);
 
@@ -83,17 +73,15 @@ describe('stdio server process', () => {
     ]);
     expect(byId(1)[0]?.result).toMatchObject({ protocolVersion: '2025-06-18' });
     expect(byId(2)[0]?.error).toEqual({ code: -32601, message: 'Method not found' });
-    expect(byId(3)[0]?.result).toEqual({ tools: [] });
+    const listed = byId(3)[0]?.result as { tools: { name: string }[] };
+    expect(listed.tools.map((tool) => tool.name)).toEqual(toolNames);
     expect(byId(4)[0]?.error).toEqual({ code: -32602, message: 'Invalid params' });
     expect(byId(5)[0]?.error).toEqual({ code: -32602, message: 'Unknown tool' });
     expect(byId(6)[0]?.result).toEqual({});
 
-    // Node itself reports a missing .env file on stderr; every other line is a structured log.
-    const logLines = stderrLines.filter((line) => !line.startsWith('.env not found'));
-    expect(logLines.length).toBeGreaterThan(0);
-    for (const line of logLines) {
-      expect(JSON.parse(line)).toHaveProperty('level');
-    }
+    const logs = logLines(stderrLines);
+    expect(logs.length).toBeGreaterThan(0);
+    for (const line of logs) expect(JSON.parse(line)).toHaveProperty('level');
   });
 
   it('keeps answering after repeated malformed input', async () => {
@@ -134,22 +122,14 @@ describe('stdio server process', () => {
 
 describe('launching through npm', () => {
   it('npm run task1 connects with the SDK client', { timeout: 30_000 }, async () => {
-    const transport = new StdioClientTransport({
-      command: 'npm',
-      args: ['run', 'task1'],
-      cwd: repoRoot,
-      stderr: 'pipe',
-    });
-    const client = new Client({ name: 'e2e-npm', version: '0' });
     // npm's script banner arrives on stdout before the server starts; the client skips it.
-    client.onerror = () => undefined;
-    await client.connect(transport);
-    try {
-      expect(client.getServerVersion()?.name).toBe('quilr-customer-mcp');
-      expect(await client.listTools()).toEqual({ tools: [] });
-    } finally {
-      await client.close();
-    }
+    await withClient(
+      async ({ client }) => {
+        expect(client.getServerVersion()?.name).toBe('quilr-customer-mcp');
+        expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(toolNames);
+      },
+      { command: 'npm', args: ['run', 'task1'] },
+    );
   });
 
   it('npm run --silent task1 writes only JSON-RPC to stdout', { timeout: 30_000 }, async () => {
@@ -175,5 +155,122 @@ describe('requests the SDK would otherwise drop', () => {
       { jsonrpc: '2.0', id: 13, error: { code: -32602, message: 'Invalid params' } },
     ]);
     expect(stderrLines.some((line) => line.includes('server closed'))).toBe(true);
+  });
+});
+
+describe('customer tools through the real server', () => {
+  const getRecord = { name: 'get_customer_record', arguments: { customer_id: 'CUST-00001' } };
+  const refund50 = {
+    name: 'trigger_refund',
+    arguments: { customer_id: 'CUST-00001', amount: 50, reason: 'Damaged on arrival' },
+  };
+
+  it('lists both tools with their schemas and annotations', async () => {
+    await withClient(async ({ client }) => {
+      expect((await client.listTools()).tools).toEqual([
+        expect.objectContaining({
+          name: 'get_customer_record',
+          inputSchema: getCustomerRecordInputSchema,
+          annotations: { readOnlyHint: true, openWorldHint: false },
+        }),
+        expect.objectContaining({
+          name: 'trigger_refund',
+          inputSchema: triggerRefundInputSchema,
+          annotations: { destructiveHint: true, idempotentHint: false, openWorldHint: false },
+        }),
+      ]);
+    });
+  });
+
+  it('reads a record, refunds, and reads the reduced balance', async () => {
+    await withClient(async ({ client }) => {
+      expect(structured(await client.callTool(getRecord))).toMatchObject({
+        refundable_balance: 250,
+      });
+      expect(structured(await client.callTool(refund50))).toMatchObject({
+        refund_id: 'REF-000001',
+        remaining_balance: 200,
+      });
+      expect(structured(await client.callTool(getRecord))).toMatchObject({
+        refundable_balance: 200,
+      });
+    });
+  });
+
+  it('reports business failures as isError and bad input as -32602', async () => {
+    await withClient(async ({ client }) => {
+      expect(
+        await client.callTool({
+          name: 'get_customer_record',
+          arguments: { customer_id: 'CUST-99999' },
+        }),
+      ).toEqual({ content: [{ type: 'text', text: 'Customer not found' }], isError: true });
+
+      const error = await client
+        .callTool({ ...refund50, arguments: { ...refund50.arguments, amount: 0 } })
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(McpError);
+      expect(error).toMatchObject({ code: -32602 });
+      expect((error as McpError).message).toContain('Invalid params');
+    });
+  });
+
+  it('starts every process with fresh mock data', async () => {
+    await withClient(async ({ client }) => {
+      await client.callTool(refund50);
+      expect(structured(await client.callTool(getRecord))).toMatchObject({
+        refundable_balance: 200,
+      });
+    });
+    await withClient(async ({ client }) => {
+      expect(structured(await client.callTool(getRecord))).toMatchObject({
+        refundable_balance: 250,
+      });
+    });
+  });
+
+  it('keeps stdout pure JSON-RPC and logs no refund reason', async () => {
+    const sentinel = 'Email jane.doe@example.com re SSN 123-45-6789';
+    const { stdoutLines, stderrLines, exitCode } = await rawSession([
+      initialize,
+      '{"jsonrpc":"2.0","method":"notifications/initialized"}',
+      '{"jsonrpc":"2.0","id":2,"method":"tools/list"}',
+      toolCall(3, 'get_customer_record', { customer_id: 'CUST-00001' }),
+      toolCall(4, 'get_customer_record', { customer_id: 'CUST-99999' }),
+      toolCall(5, 'trigger_refund', { customer_id: 'CUST-00001', amount: 25, reason: sentinel }),
+      toolCall(6, 'trigger_refund', {
+        customer_id: 'CUST-00003',
+        amount: 5,
+        reason: 'Late delivery fee',
+      }),
+      toolCall(7, 'trigger_refund', { customer_id: 'CUST-00001', amount: -1, reason: sentinel }),
+      '{bad json',
+    ]);
+
+    expect(exitCode).toBe(0);
+    // 9 inputs, one of them a notification, which gets no reply.
+    expect(stdoutLines).toHaveLength(8);
+    for (const line of stdoutLines) expect(line).not.toMatch(leakPattern);
+    const lines = stdoutLines.map(parseJsonRpcLine);
+    const byId = (id: unknown) => lines.find((line) => line.id === id);
+
+    expect(structured(byId(3)?.result)).toMatchObject({ customer_id: 'CUST-00001' });
+    expect(byId(4)?.result).toMatchObject({ isError: true });
+    expect(structured(byId(5)?.result)).toMatchObject({
+      refund_id: 'REF-000001',
+      reason: sentinel,
+    });
+    expect(byId(6)?.result).toMatchObject({ isError: true });
+    expect(byId(7)?.error).toEqual({ code: -32602, message: 'Invalid params' });
+    expect(byId(null)?.error).toEqual({ code: -32700, message: 'Parse error' });
+    expect(stdoutLines.filter((line) => line.includes('jane.doe'))).toHaveLength(1);
+
+    const logs = logLines(stderrLines);
+    expect(logs.some((line) => line.includes('"refund_id":"REF-000001"'))).toBe(true);
+    for (const line of logs) expect(JSON.parse(line)).toHaveProperty('level');
+    for (const line of stderrLines) {
+      expect(line).not.toContain('jane.doe');
+      expect(line).not.toContain('123-45-6789');
+    }
   });
 });
