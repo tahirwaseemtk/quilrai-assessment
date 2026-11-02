@@ -11,6 +11,7 @@ import {
   type CustomerRepository,
 } from '../src/customer-repository.js';
 import { RpcError } from '../src/errors.js';
+import { ArgumentMessage } from '../src/field-errors.js';
 import { createLogger } from '../src/logger.js';
 import { createServer, defineTool, type ToolDefinition } from '../src/server.js';
 import { getCustomerRecordInputSchema, triggerRefundInputSchema } from '../src/tool-schemas.js';
@@ -215,33 +216,89 @@ describe('registered tools', () => {
   });
 
   it.each([
-    ['missing arguments', undefined],
-    ['empty arguments', {}],
-    ['short id', { customer_id: 'CUST-1' }],
-    ['extra key', { customer_id: 'CUST-00001', extra: 1 }],
-    ['null arguments', null],
-    ['array arguments', []],
-  ])('answers %s with a fixed -32602', async (_label, args) => {
+    ['missing arguments', undefined, `Invalid params: ${ArgumentMessage.CustomerIdRequired}`],
+    ['empty arguments', {}, `Invalid params: ${ArgumentMessage.CustomerIdRequired}`],
+    ['short id', { customer_id: 'CUST-1' }, `Invalid params: ${ArgumentMessage.CustomerId}`],
+    [
+      'extra key',
+      { customer_id: 'CUST-00001', extra: 1 },
+      `Invalid params: ${ArgumentMessage.UnknownArguments}`,
+    ],
+  ])('answers %s with a field-level -32602', async (_label, args, message) => {
     const { call } = await connect(mockTools());
     const response = await call(callTool(5, 'get_customer_record', args));
-    expect(response).toEqual({
+    expect(response).toEqual({ jsonrpc: '2.0', id: 5, error: { code: -32602, message } });
+    expect(JSON.stringify(response)).not.toMatch(/issues|Zod|expected/);
+  });
+
+  // Non-object arguments are rejected by the inbound classifier before any tool runs.
+  it.each([
+    ['null arguments', null],
+    ['array arguments', []],
+    ['string arguments', 's'],
+    ['number arguments', 1],
+  ])('answers %s with the envelope-level -32602', async (_label, args) => {
+    const { call } = await connect(mockTools());
+    expect(await call(callTool(5, 'get_customer_record', args))).toEqual({
       jsonrpc: '2.0',
       id: 5,
       error: { code: -32602, message: 'Invalid params' },
     });
-    expect(JSON.stringify(response)).not.toMatch(/issues|Zod|expected/);
   });
 
   it.each([
-    ['too many decimals', { ...refundArgs, amount: 0.001 }],
-    ['short reason', { ...refundArgs, reason: '012345678' }],
-  ])('answers a refund with %s with a fixed -32602', async (_label, args) => {
+    ['too many decimals', { ...refundArgs, amount: 0.001 }, ArgumentMessage.Amount],
+    ['short reason', { ...refundArgs, reason: '012345678' }, ArgumentMessage.Reason],
+    [
+      'no arguments',
+      {},
+      [
+        ArgumentMessage.CustomerIdRequired,
+        ArgumentMessage.AmountRequired,
+        ArgumentMessage.ReasonRequired,
+      ].join('; '),
+    ],
+  ])('answers a refund with %s with a field-level -32602', async (_label, args, fragments) => {
     const { call } = await connect(mockTools());
     expect((await call(callTool(6, 'trigger_refund', args))).error).toEqual({
       code: -32602,
-      message: 'Invalid params',
+      message: `Invalid params: ${fragments}`,
     });
   });
+
+  const rawCall = (line: string) => JSON.parse(line) as Record<string, unknown>;
+
+  it('never echoes prototype-like key names from the wire', async () => {
+    const { call } = await connect(mockTools());
+    const response = await call(
+      rawCall(
+        '{"id":12,"method":"tools/call","params":{"name":"get_customer_record","arguments":{"customer_id":"x","constructor":1,"toString":1}}}',
+      ),
+    );
+    expect(response.error).toEqual({
+      code: -32602,
+      message: `Invalid params: ${ArgumentMessage.CustomerId}; ${ArgumentMessage.UnknownArguments}`,
+    });
+    expect(JSON.stringify(response)).not.toMatch(/constructor|toString/);
+  });
+
+  // The SDK drops an own __proto__ argument key before validation; inbound rejects it instead.
+  it.each(['{"x":1}', 'null', '"s"'])(
+    'rejects __proto__ as the only extra argument (value %s)',
+    async (value) => {
+      const { call } = await connect(mockTools());
+      const response = await call(
+        rawCall(
+          `{"id":13,"method":"tools/call","params":{"name":"get_customer_record","arguments":{"customer_id":"CUST-00001","__proto__":${value}}}}`,
+        ),
+      );
+      expect(response).toEqual({
+        jsonrpc: '2.0',
+        id: 13,
+        error: { code: -32602, message: 'Invalid params' },
+      });
+    },
+  );
 
   it('keeps state across calls', async () => {
     const { call } = await connect(mockTools());

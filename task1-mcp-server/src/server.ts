@@ -7,6 +7,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import type { z } from 'zod';
 import { ErrorCode, ErrorMessage, RpcError } from './errors.js';
+import { describeArgumentIssues, type ArgumentField } from './field-errors.js';
 import type { Logger } from './logger.js';
 
 type ToolResult = CallToolResult | Promise<CallToolResult>;
@@ -19,6 +20,8 @@ export interface ToolDefinition {
   inputSchema: Tool['inputSchema'];
   annotations?: Tool['annotations'];
   args: z.ZodType;
+  // Fields that get field-level -32602 messages; without them errors stay "Invalid params".
+  argumentFields?: readonly ArgumentField[];
   handler: (input: unknown) => ToolResult;
 }
 
@@ -33,8 +36,13 @@ export function defineTool<S extends z.ZodType>(
 }
 
 export async function runTool(tool: ToolDefinition, args: unknown): Promise<CallToolResult> {
-  const parsed = tool.args.safeParse(args);
-  if (!parsed.success) throw new RpcError(ErrorCode.InvalidParams, ErrorMessage.InvalidParams);
+  // MCP makes `arguments` optional; treating its absence as {} reports which fields are missing.
+  const input = args === undefined ? {} : args;
+  const parsed = tool.args.safeParse(input);
+  if (!parsed.success) {
+    const message = describeArgumentIssues(parsed.error.issues, input, tool.argumentFields ?? []);
+    throw new RpcError(ErrorCode.InvalidParams, message);
+  }
   return tool.handler(parsed.data);
 }
 

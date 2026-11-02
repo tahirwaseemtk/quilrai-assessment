@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { RpcError } from '../src/errors.js';
+import { ArgumentMessage } from '../src/field-errors.js';
 import {
   createMockCustomerRepository,
   type CustomerRepository,
@@ -179,31 +180,41 @@ describe('business failures', () => {
 });
 
 describe('invalid arguments', () => {
-  it.each([undefined, {}, { customer_id: 'cust-00001' }, { customer_id: 'CUST-00001', extra: 1 }])(
-    'get_customer_record rejects %j with -32602 before touching the repository',
-    async (args) => {
-      const repository = spyRepository();
-      const { get } = setup(repository);
-      await expect(get.handler(args)).rejects.toEqual(new RpcError(-32602, 'Invalid params'));
-      expect(repository.calls).toBe(0);
-    },
-  );
+  const P = 'Invalid params: ';
+  const M = ArgumentMessage;
 
   it.each([
-    undefined,
-    {},
-    refundArgs({ amount: 0 }),
-    refundArgs({ amount: 0.001 }),
-    refundArgs({ amount: '10' }),
-    refundArgs({ amount: NaN }),
-    refundArgs({ reason: 'short' }),
-    { customer_id: 'CUST-00001', amount: 50 },
-  ])('trigger_refund rejects %j with -32602 before touching the repository', async (args) => {
+    [undefined, P + M.CustomerIdRequired],
+    [{}, P + M.CustomerIdRequired],
+    [{ customer_id: 'cust-00001' }, P + M.CustomerId],
+    [{ customer_id: 'CUST-00001', extra: 1 }, P + M.UnknownArguments],
+    [null, P + M.NotAnObject],
+  ])('get_customer_record rejects %j with %j', async (args, message) => {
+    const repository = spyRepository();
+    const { get } = setup(repository);
+    await expect(get.handler(args)).rejects.toEqual(new RpcError(-32602, message));
+    expect(repository.calls).toBe(0);
+  });
+
+  it.each([
+    [undefined, P + [M.CustomerIdRequired, M.AmountRequired, M.ReasonRequired].join('; ')],
+    [{}, P + [M.CustomerIdRequired, M.AmountRequired, M.ReasonRequired].join('; ')],
+    [refundArgs({ amount: 0 }), P + M.Amount],
+    [refundArgs({ amount: 0.001 }), P + M.Amount],
+    [refundArgs({ amount: '10' }), P + M.Amount],
+    [refundArgs({ amount: NaN }), P + M.Amount],
+    [refundArgs({ reason: 'short' }), P + M.Reason],
+    [{ customer_id: 'CUST-00001', amount: 50 }, P + M.ReasonRequired],
+  ])('trigger_refund rejects %j with %j', async (args, message) => {
     const repository = spyRepository();
     const { refund } = setup(repository);
     const error = await refund.handler(args).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(RpcError);
-    expect(error).toMatchObject({ code: -32602, message: 'Invalid params' });
+    expect(error).toMatchObject({ code: -32602, message });
+    expect((error as Error).message).not.toMatch(
+      /issues|Zod|expected|received|invalid_type|too_small/,
+    );
+    expect(error).not.toHaveProperty('cause');
     expect(repository.calls).toBe(0);
   });
 });

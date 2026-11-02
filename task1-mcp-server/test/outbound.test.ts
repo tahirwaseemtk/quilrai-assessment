@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
+import { ArgumentMessage } from '../src/field-errors.js';
 import { sanitizeOutbound } from '../src/outbound.js';
 
 const asMessage = (value: unknown): JSONRPCMessage => value as JSONRPCMessage;
@@ -77,5 +78,27 @@ describe('sanitizeOutbound', () => {
       asMessage({ jsonrpc: '2.0', error: { code: -32603, message: 'x' } }),
     );
     expect('id' in output).toBe(false);
+  });
+});
+
+describe('sanitizeOutbound: field-level messages', () => {
+  const amountMessage = `Invalid params: ${ArgumentMessage.Amount}`;
+
+  it('keeps an allowed field-level message after removing the SDK prefix', () => {
+    expect(
+      sanitizeOutbound(withError({ code: -32602, message: `MCP error -32602: ${amountMessage}` })),
+    ).toEqual(withError({ code: -32602, message: amountMessage }));
+  });
+
+  it('replaces a tampered field-level message with the canonical one', () => {
+    expect(
+      sanitizeOutbound(withError({ code: -32602, message: `${amountMessage}; leaked detail` })),
+    ).toEqual(withError({ code: -32602, message: 'Invalid params' }));
+  });
+
+  it('replaces a field-level message under another code', () => {
+    expect(sanitizeOutbound(withError({ code: -32603, message: amountMessage }))).toEqual(
+      withError({ code: -32603, message: 'Internal error' }),
+    );
   });
 });

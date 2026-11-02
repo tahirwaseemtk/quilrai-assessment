@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
+export const CUSTOMER_ID_DIGITS = 5;
 // [0-9] rather than \d: some validators (Python re) treat \d as any Unicode digit.
-export const CUSTOMER_ID_PATTERN = '^CUST-[0-9]{5}$';
+export const CUSTOMER_ID_PATTERN = `^CUST-[0-9]{${CUSTOMER_ID_DIGITS}}$`;
 export const AMOUNT_MAX = 10_000;
 export const REASON_MIN_LENGTH = 10;
 export const REASON_MAX_LENGTH = 500;
@@ -39,25 +40,17 @@ export function visibleLength(value: string): number {
 
 const customerId = z.string().regex(new RegExp(CUSTOMER_ID_PATTERN));
 
-const amount = z
-  .number()
-  .positive()
-  .max(AMOUNT_MAX)
-  .refine(hasAtMostTwoDecimals, { message: 'amount must have at most 2 decimal places' });
+const amount = z.number().positive().max(AMOUNT_MAX).refine(hasAtMostTwoDecimals);
 
+// Client-facing wording lives in field-errors.ts (ArgumentMessage); issue messages are unused.
 // The maximum applies to the raw string so the published JSON Schema maxLength agrees with it;
 // the minimum applies to visible content after trimming, which JSON Schema cannot express.
 const reason = z
   .string()
   // abort: Zod otherwise keeps running later checks, normalizing an oversized string for nothing.
-  .refine((value) => codePointLength(value) <= REASON_MAX_LENGTH, {
-    message: `reason must be at most ${REASON_MAX_LENGTH} characters`,
-    abort: true,
-  })
+  .refine((value) => codePointLength(value) <= REASON_MAX_LENGTH, { abort: true })
   .overwrite(normalizeReason)
-  .refine((value) => visibleLength(value) >= REASON_MIN_LENGTH, {
-    message: `reason must have at least ${REASON_MIN_LENGTH} visible characters`,
-  });
+  .refine((value) => visibleLength(value) >= REASON_MIN_LENGTH);
 
 export const GetCustomerRecordArgs = z.strictObject({ customer_id: customerId });
 
