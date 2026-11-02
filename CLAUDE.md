@@ -50,7 +50,7 @@ Task folders: `task1-mcp-server`, `task2-mcp-gateway`, `task3-stream-guardrail`,
 
 - stdout is reserved for JSON-RPC only. Never use `console.log`, `console.info`, or `process.stdout.write` for logs. Use the stderr logger.
 - Connect over stdio. If the SDK `StdioServerTransport` does not answer malformed JSON with `-32700`, use a small transport implementing the SDK `Transport` interface that does.
-- Use the low-level SDK `Server` and validate arguments with Zod in the `tools/call` handler, so invalid input returns JSON-RPC `-32602` instead of an `isError` tool result.
+- Use the low-level SDK `Server`. Every tool declares a Zod `args` schema, and the server validates it in the shared `tools/call` path (`runTool`) before the handler runs, so invalid input returns JSON-RPC `-32602` instead of an `isError` tool result.
 - Tools:
   - `get_customer_record`: `customer_id` must match `^CUST-\d{5}$`
   - `trigger_refund`: `customer_id` (same format), `amount` positive finite number with at most 2 decimals, `reason` trimmed string with at least 10 characters

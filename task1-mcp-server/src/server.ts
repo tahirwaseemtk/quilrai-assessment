@@ -5,15 +5,37 @@ import {
   type CallToolResult,
   type Tool,
 } from '@modelcontextprotocol/sdk/types.js';
+import type { z } from 'zod';
 import { ErrorCode, ErrorMessage, RpcError } from './errors.js';
 import type { Logger } from './logger.js';
 
+type ToolResult = CallToolResult | Promise<CallToolResult>;
+
+// `args` is required so no tool can be registered without validation; the server parses the
+// arguments before any handler runs.
 export interface ToolDefinition {
   name: string;
   description: string;
   inputSchema: Tool['inputSchema'];
   annotations?: Tool['annotations'];
-  handler: (args: Record<string, unknown> | undefined) => CallToolResult | Promise<CallToolResult>;
+  args: z.ZodType;
+  handler: (input: unknown) => ToolResult;
+}
+
+export function defineTool<S extends z.ZodType>(
+  tool: Omit<ToolDefinition, 'args' | 'handler'> & {
+    args: S;
+    handler: (input: z.output<S>) => ToolResult;
+  },
+): ToolDefinition {
+  // Sound only because runTool always parses with this same `args` before calling the handler.
+  return tool as ToolDefinition;
+}
+
+export async function runTool(tool: ToolDefinition, args: unknown): Promise<CallToolResult> {
+  const parsed = tool.args.safeParse(args);
+  if (!parsed.success) throw new RpcError(ErrorCode.InvalidParams, ErrorMessage.InvalidParams);
+  return tool.handler(parsed.data);
 }
 
 export interface ServerOptions {
@@ -43,7 +65,7 @@ export function createServer({ logger, tools = [], info = SERVER_INFO }: ServerO
     const tool = registry.get(request.params.name);
     if (!tool) throw new RpcError(ErrorCode.InvalidParams, ErrorMessage.UnknownTool);
     try {
-      return await tool.handler(request.params.arguments);
+      return await runTool(tool, request.params.arguments);
     } catch (error) {
       if (error instanceof RpcError) throw error;
       logger.error('tool handler failed', { tool: tool.name, error });
