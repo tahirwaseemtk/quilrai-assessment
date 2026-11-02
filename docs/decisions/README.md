@@ -14,6 +14,7 @@ One file per decision, named `NNN-short-title.md`. Source is `[Spec]` when the a
 | [008](008-node-22-typescript-6.md)      | Node 22.12+ baseline, TypeScript pinned to 6.0         | Decided | Accepted |
 | [009](009-ci-merge-gate.md)             | CI merge gate on every PR (`ci-ok` required check)     | Decided | Accepted |
 | [010](010-disable-install-scripts.md)   | Disable dependency install scripts via `.npmrc`        | Decided | Accepted |
+| [011](011-project-review-subagents.md)  | Read-only project review subagents, dry-run verified   | Decided | Accepted |
 
 ## Template
 

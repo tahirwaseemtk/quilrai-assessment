@@ -28,3 +28,4 @@ npm run check          # typecheck + lint + format check + all tests
 - Design decisions: [docs/decisions](docs/decisions/README.md)
 - Branching: `taskN/main` ← `taskN/N.M-slug` via PR; `main` only receives finished tasks.
 - Each task folder: `index.ts` entry, `src/`, `test/`.
+- Review subagents (read-only): [.claude/agents](.claude/agents/), see [ADR 011](docs/decisions/011-project-review-subagents.md).
