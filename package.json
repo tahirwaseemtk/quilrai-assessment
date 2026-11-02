@@ -8,7 +8,9 @@
     "node": ">=22.12"
   },
   "scripts": {
+    "task1": "tsx --env-file-if-exists=.env task1-mcp-server/index.ts",
     "test": "vitest run --passWithNoTests",
+    "test:task1": "vitest run task1-mcp-server",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",

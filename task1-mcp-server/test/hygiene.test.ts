@@ -1,0 +1,52 @@
+import { readFileSync, readdirSync } from 'node:fs';
+import path from 'node:path';
+import { ESLint } from 'eslint';
+import { describe, expect, it } from 'vitest';
+import { repoRoot, serverEntry } from './helpers/process.js';
+
+const taskDir = path.join(repoRoot, 'task1-mcp-server');
+
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return entry.name === 'test' ? [] : sourceFiles(full);
+    return entry.name.endsWith('.ts') ? [full] : [];
+  });
+}
+
+// The lint probes use a .js path: type-aware linting cannot resolve a .ts file that is not on
+// disk. no-console is configured globally, so the result applies to the .ts sources as well.
+describe('stdout hygiene', () => {
+  it.each(['console.log(1);', 'console.info(1);', 'console.warn(1);'])(
+    'lint rejects %s',
+    async (code) => {
+      const [result] = await new ESLint({ cwd: repoRoot }).lintText(code, {
+        filePath: path.join(taskDir, 'src', 'probe.js'),
+      });
+      expect(result?.messages.map((message) => message.ruleId)).toEqual(['no-console']);
+    },
+  );
+
+  it('lint allows console.error', async () => {
+    const [result] = await new ESLint({ cwd: repoRoot }).lintText('console.error(1);', {
+      filePath: path.join(taskDir, 'src', 'probe.js'),
+    });
+    expect(result?.messages).toEqual([]);
+  });
+
+  it('source never writes to stdout directly', () => {
+    const files = sourceFiles(taskDir);
+    expect(files.length).toBeGreaterThan(0);
+    for (const file of files) {
+      const text = readFileSync(file, 'utf8');
+      expect(text, file).not.toMatch(/process\.stdout\.write|console\.(log|info|warn|debug)\(/);
+    }
+  });
+
+  it('npm run task1 starts the same entry the tests spawn', () => {
+    const pkg = JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as {
+      scripts: Record<string, string>;
+    };
+    expect(pkg.scripts.task1).toBe(`tsx --env-file-if-exists=.env ${serverEntry}`);
+  });
+});
