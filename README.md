@@ -9,8 +9,8 @@ Node 22.12+ and npm 10+.
 ## Quick start
 
 ```sh
-npm install
-cp .env.example .env
+npm ci
+cp .env.example .env   # optional: tasks run with safe local defaults
 npm run check          # typecheck + lint + format check + all tests
 ```
 
