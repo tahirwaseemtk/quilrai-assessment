@@ -25,6 +25,7 @@ One file per decision, named `NNN-short-title.md`. Source is `[Spec]` when the a
 | [019](019-gateway-client-auth.md)             | Gateway client authentication and role config                | Spec + Decided | Accepted |
 | [020](020-gateway-envelope-classification.md) | Gateway envelope classification and shared JSON-RPC envelope | Spec + Decided | Accepted |
 | [021](021-gateway-http-layer.md)              | Gateway HTTP layer and passthrough proxy                     | Spec + Decided | Accepted |
+| [022](022-gateway-admin-gate.md)              | Gateway admin gate and tool-name check                       | Spec + Decided | Accepted |
 
 ## Template
 
