@@ -95,7 +95,7 @@ describe('LineTransport framing', () => {
       ]),
     );
     await flush();
-    expect((messages[0] as { params: { s: string } }).params.s).toBe('�');
+    expect((messages[0] as { params: { s: string } }).params.s).toBe('\uFFFD');
   });
 });
 
@@ -167,11 +167,11 @@ describe('LineTransport send', () => {
   it('writes exactly one newline-terminated line per message', async () => {
     const { transport, outputText } = createHarness();
     await transport.start();
-    await transport.send({ jsonrpc: '2.0', id: 1, result: { t: 'a\nb ' } });
+    await transport.send({ jsonrpc: '2.0', id: 1, result: { t: 'a\nb\u2028' } });
     const text = outputText();
     expect(text.endsWith('\n')).toBe(true);
     expect(text.slice(0, -1)).not.toContain('\n');
-    expect(JSON.parse(text)).toEqual({ jsonrpc: '2.0', id: 1, result: { t: 'a\nb ' } });
+    expect(JSON.parse(text)).toEqual({ jsonrpc: '2.0', id: 1, result: { t: 'a\nb\u2028' } });
   });
 
   it('sanitizes error messages before writing', async () => {

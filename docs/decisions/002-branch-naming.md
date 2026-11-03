@@ -23,3 +23,7 @@ Each task has an integration branch, and each sub-task gets its own branch merge
 ## Consequences
 
 Every sub-task has a reviewable PR, and `git log --first-parent taskN/main` reads as the list of sub-tasks.
+
+## History
+
+Task 1 sub-tasks 1.1 (PR #5) and 1.2 (PR #6) were merged straight into `main` before `task1/main` was in use. The owner then confirmed this ADR: from 1.3 on, sub-task PRs target `task1/main`. `task1/main` was fast-forwarded to `main` (`a9181b2`) so it contains 1.1 and 1.2. Its first-parent log therefore starts at 1.3, and the earlier sub-tasks appear in `main`'s history.

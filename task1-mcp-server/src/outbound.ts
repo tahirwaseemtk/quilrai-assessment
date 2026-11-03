@@ -1,5 +1,6 @@
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 import { ErrorCode, canonicalMessage, isKnownCode, isSafeMessage } from './errors.js';
+import { isSafeArgumentMessage } from './field-errors.js';
 
 const SDK_PREFIX = /^MCP error -?\d+: /;
 
@@ -11,8 +12,10 @@ export function sanitizeOutbound(message: JSONRPCMessage): JSONRPCMessage {
   const { code, message: text } = message.error;
   const safeCode = isKnownCode(code) ? code : ErrorCode.InternalError;
   const stripped = text.replace(SDK_PREFIX, '');
-  const safeText =
-    safeCode === code && isSafeMessage(code, stripped) ? stripped : canonicalMessage(safeCode);
+  const allowed =
+    isSafeMessage(code, stripped) ||
+    (code === ErrorCode.InvalidParams && isSafeArgumentMessage(stripped));
+  const safeText = safeCode === code && allowed ? stripped : canonicalMessage(safeCode);
 
   const error = { code: safeCode, message: safeText };
   return 'id' in message

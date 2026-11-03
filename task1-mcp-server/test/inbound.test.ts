@@ -183,12 +183,27 @@ describe('classifyInbound: tools/call params', () => {
     expectMessage(call(params));
   });
 
-  it('passes __proto__ inside arguments without polluting Object.prototype', () => {
-    const result = classifyInbound(
-      call('{"name":"x","arguments":{"__proto__":{"polluted":true}}}'),
-    );
-    expect(result.kind).toBe('message');
+  // The SDK rebuilds `arguments` and silently drops an own __proto__ key, so strict argument
+  // schemas would never see it. It is rejected here, while the raw object is still available.
+  it.each([
+    '{"name":"x","arguments":{"__proto__":{"polluted":true}}}',
+    '{"name":"get_customer_record","arguments":{"customer_id":"CUST-00001","__proto__":null}}',
+    '{"name":"get_customer_record","arguments":{"customer_id":"CUST-00001","__proto__":"s"}}',
+  ])('rejects an own __proto__ argument key in %s', (params) => {
+    expect(classifyInbound(call(params))).toEqual(invalidParams(4));
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it('drops a tools/call notification with an own __proto__ argument key', () => {
+    expect(
+      classifyInbound(
+        '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"x","arguments":{"__proto__":1}}}',
+      ),
+    ).toEqual(drop);
+  });
+
+  it('passes a nested __proto__ key, which the strict schemas reject as a field error', () => {
+    expectMessage(call('{"name":"x","arguments":{"customer_id":{"__proto__":1}}}'));
   });
 });
 

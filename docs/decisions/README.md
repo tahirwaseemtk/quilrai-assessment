@@ -18,6 +18,8 @@ One file per decision, named `NNN-short-title.md`. Source is `[Spec]` when the a
 | [012](012-low-level-server-rpc-errors.md) | Low-level SDK `Server` with fixed-message `RpcError`   | Spec + Decided | Accepted |
 | [013](013-custom-line-transport.md)       | Custom stdio line transport                            | Spec + Decided | Accepted |
 | [014](014-tool-argument-schemas.md)       | Tool argument schemas and hand-written JSON Schema     | Spec + Decided | Accepted |
+| [015](015-tool-behavior-mock-data.md)     | Tool behavior, mock data and refund logging            | Spec + Decided | Accepted |
+| [016](016-field-level-invalid-params.md)  | Field-level Invalid params messages                    | Spec + Decided | Accepted |
 
 ## Template
 
