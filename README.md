@@ -16,12 +16,12 @@ npm run check          # typecheck + lint + format check + all tests
 
 ## Tasks
 
-| #   | Task                                         | Run                                       | Status  | Docs                                           |
-| --- | -------------------------------------------- | ----------------------------------------- | ------- | ---------------------------------------------- |
-| 1   | Stdio MCP server with strict validation      | `npm run task1`                           | Done    | [docs](docs/task1-mcp-server/README.md)        |
-| 2   | MCP security gateway (auth + tool filtering) | `npm run task2:mock` then `npm run task2` | Done    | [docs](docs/task2-mcp-gateway/README.md)       |
-| 3   | Streaming PII redaction guardrail            | _pending_                                 | Planned | [docs](docs/task3-stream-guardrail/README.md)  |
-| 4   | Token rate limiter + model fallback (SQLite) | _pending_                                 | Planned | [docs](docs/task4-rate-limit-router/README.md) |
+| #   | Task                                         | Run                                           | Status  | Docs                                           |
+| --- | -------------------------------------------- | --------------------------------------------- | ------- | ---------------------------------------------- |
+| 1   | Stdio MCP server with strict validation      | `npm run task1`                               | Done    | [docs](docs/task1-mcp-server/README.md)        |
+| 2   | MCP security gateway (auth + tool filtering) | `npm run task2:mock` then `npm run task2`     | Done    | [docs](docs/task2-mcp-gateway/README.md)       |
+| 3   | Streaming PII redaction guardrail            | `npm run task3:provider` then `npm run task3` | Done    | [docs](docs/task3-stream-guardrail/README.md)  |
+| 4   | Token rate limiter + model fallback (SQLite) | _pending_                                     | Planned | [docs](docs/task4-rate-limit-router/README.md) |
 
 ## Repo conventions
 
