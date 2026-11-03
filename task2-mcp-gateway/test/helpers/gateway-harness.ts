@@ -27,6 +27,8 @@ const running: Gateway[] = [];
 export async function startGateway(options: {
   downstreamUrl: string;
   timeoutMs?: number;
+  idleTimeoutMs?: number;
+  maxResponseBytes?: number;
 }): Promise<StartedGateway> {
   const sink = new CaptureSink();
   const gateway = createGateway({
@@ -34,6 +36,10 @@ export async function startGateway(options: {
     downstreamUrl: options.downstreamUrl,
     downstreamToken: DOWNSTREAM_TOKEN,
     timeoutMs: options.timeoutMs ?? 5000,
+    idleTimeoutMs: options.idleTimeoutMs ?? 30_000,
+    ...(options.maxResponseBytes === undefined
+      ? {}
+      : { maxResponseBytes: options.maxResponseBytes }),
     logger: createLogger({ service: 'task2-mcp-gateway', sink }),
   });
   running.push(gateway);

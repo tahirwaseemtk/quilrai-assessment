@@ -7,6 +7,7 @@ export interface GatewayConfig {
   downstreamUrl: string;
   downstreamToken: string;
   timeoutMs: number;
+  idleTimeoutMs: number;
   table: TokenTable;
 }
 
@@ -66,6 +67,7 @@ const schema = z.object({
       .default(DEFAULT_DOWNSTREAM_URL),
   ),
   DOWNSTREAM_TIMEOUT_MS: integerSetting(1, MAX_TIMER_MS, 5000),
+  DOWNSTREAM_IDLE_TIMEOUT_MS: integerSetting(1000, MAX_TIMER_MS, 30_000),
   DOWNSTREAM_AUTH_TOKEN: z.string().refine(isValidTokenSyntax),
 });
 
@@ -85,6 +87,7 @@ export function parseGatewayConfig(env: Record<string, string | undefined>): Gat
       downstreamUrl: parsed.data.DOWNSTREAM_MCP_URL,
       downstreamToken: parsed.data.DOWNSTREAM_AUTH_TOKEN,
       timeoutMs: parsed.data.DOWNSTREAM_TIMEOUT_MS,
+      idleTimeoutMs: parsed.data.DOWNSTREAM_IDLE_TIMEOUT_MS,
       table: tokens.table,
     },
     warnings: tokens.warnings,

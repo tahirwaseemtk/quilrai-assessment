@@ -168,3 +168,26 @@ describe('consumeSecrets', () => {
     expect(env).toEqual({ OTHER: 'y' });
   });
 });
+
+describe('DOWNSTREAM_IDLE_TIMEOUT_MS', () => {
+  it('defaults to 30 seconds, and blank means the default', () => {
+    expect(config().idleTimeoutMs).toBe(30_000);
+    expect(config({ DOWNSTREAM_IDLE_TIMEOUT_MS: '   ' }).idleTimeoutMs).toBe(30_000);
+  });
+
+  it.each(['-1', '1.5', 'abc', '1e3', '0x7530', '+30000', 'Infinity', 'NaN', '999', '2147483648'])(
+    'rejects %j, naming only the setting',
+    (value) => {
+      expect(parse({ DOWNSTREAM_IDLE_TIMEOUT_MS: value })).toEqual({
+        ok: false,
+        fields: ['DOWNSTREAM_IDLE_TIMEOUT_MS'],
+      });
+    },
+  );
+
+  it('accepts the bounds and stores the number', () => {
+    expect(config({ DOWNSTREAM_IDLE_TIMEOUT_MS: '1000' }).idleTimeoutMs).toBe(1000);
+    expect(config({ DOWNSTREAM_IDLE_TIMEOUT_MS: '2147483647' }).idleTimeoutMs).toBe(2_147_483_647);
+    expect(config({ DOWNSTREAM_IDLE_TIMEOUT_MS: '45000' }).idleTimeoutMs).toBe(45_000);
+  });
+});
