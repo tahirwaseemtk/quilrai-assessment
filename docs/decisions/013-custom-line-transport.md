@@ -29,7 +29,7 @@ The stock transport also closes itself when its read buffer exceeds 10 MB, which
 - Lines over 1 MiB get one `-32600` as soon as the limit is crossed. The rest of the line is discarded, so memory stays bounded and the server keeps running.
 - Every outgoing message passes `sanitizeOutbound` (ADR 012), is written as one line, and respects backpressure.
 - When stdin ends, the transport closes once every request read before the end has been answered or cancelled (`notifications/cancelled`), counted per id. Replies to piped requests are therefore never lost. A failed stdout write closes the transport, because the client is gone.
-- Only the transport writes to stdout. Logs go to stderr via `src/logger.ts`.
+- Only the transport writes to stdout. Logs go to stderr via the shared logger (`shared/logger.ts`, ADR 017).
 
 ## Launching for MCP clients
 

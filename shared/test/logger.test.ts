@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createLogger, parseLogLevel } from '../src/logger.js';
-import { CaptureSink } from './helpers/streams.js';
+import { createLogger, parseLogLevel } from '../logger.js';
+import { CaptureSink } from './helpers/capture-sink.js';
 
 const fixedNow = () => new Date('2026-11-02T10:00:00.000Z');
 
 function capture(level: 'debug' | 'info' | 'warn' | 'error' = 'debug') {
   const sink = new CaptureSink();
-  const logger = createLogger({ sink, level, now: fixedNow });
+  const logger = createLogger({ service: 'test-service', sink, level, now: fixedNow });
   const parsed = () => sink.lines().map((line) => JSON.parse(line) as Record<string, unknown>);
   return { sink, logger, parsed };
 }
@@ -22,7 +22,13 @@ describe('createLogger', () => {
     expect(sink.chunks).toHaveLength(1);
     expect(sink.chunks[0]?.endsWith('\n')).toBe(true);
     expect(parsed()).toEqual([
-      { time: '2026-11-02T10:00:00.000Z', level: 'info', msg: 'started', pid: 1 },
+      {
+        service: 'test-service',
+        time: '2026-11-02T10:00:00.000Z',
+        level: 'info',
+        msg: 'started',
+        pid: 1,
+      },
     ]);
   });
 
@@ -43,8 +49,8 @@ describe('createLogger', () => {
 
   it('keeps reserved fields from being overwritten', () => {
     const { logger, parsed } = capture();
-    logger.info('real', { level: 'fake', msg: 'fake', time: 'fake' });
-    expect(parsed()[0]).toMatchObject({ level: 'info', msg: 'real' });
+    logger.info('real', { level: 'fake', msg: 'fake', time: 'fake', service: 'fake' });
+    expect(parsed()[0]).toMatchObject({ level: 'info', msg: 'real', service: 'test-service' });
   });
 
   it('keeps embedded newlines on one physical line', () => {
@@ -85,7 +91,7 @@ describe('createLogger', () => {
   it('defaults to stderr and never writes to stdout', () => {
     const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const stdout = vi.spyOn(process.stdout, 'write');
-    createLogger().info('to stderr');
+    createLogger({ service: 'test-service' }).info('to stderr');
     expect(stderr).toHaveBeenCalledTimes(1);
     expect(stdout).not.toHaveBeenCalled();
   });
@@ -99,5 +105,33 @@ describe('parseLogLevel', () => {
     ['loud', 'info'],
   ])('parses %s as %s', (input, expected) => {
     expect(parseLogLevel(input)).toBe(expected);
+  });
+});
+
+describe('service tagging', () => {
+  it('tags every line with its own service, so tasks sharing a terminal stay distinguishable', () => {
+    const sink = new CaptureSink();
+    const gateway = createLogger({ service: 'task2-mcp-gateway', sink });
+    const mock = createLogger({ service: 'mock-downstream', sink });
+    gateway.info('a');
+    mock.warn('b');
+    gateway.error('c');
+    const services = sink.lines().map((line) => (JSON.parse(line) as { service: string }).service);
+    expect(services).toEqual(['task2-mcp-gateway', 'mock-downstream', 'task2-mcp-gateway']);
+  });
+
+  it('keeps separate loggers independent', () => {
+    const quietSink = new CaptureSink();
+    const loudSink = new CaptureSink();
+    const quiet = createLogger({ service: 'quiet', sink: quietSink, level: 'error' });
+    const loud = createLogger({ service: 'loud', sink: loudSink, level: 'debug' });
+    quiet.info('hidden');
+    loud.debug('shown');
+    expect(quietSink.lines()).toEqual([]);
+    expect(loudSink.lines()).toHaveLength(1);
+  });
+
+  it.each(['', '   '])('refuses an empty service name %j', (service) => {
+    expect(() => createLogger({ service })).toThrow('service');
   });
 });

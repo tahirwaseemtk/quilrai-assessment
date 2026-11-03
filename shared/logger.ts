@@ -13,6 +13,8 @@ export interface Logger {
 }
 
 export interface LoggerOptions {
+  // Tags every line, so output from tasks and stubs sharing a terminal stays distinguishable.
+  service: string;
   sink?: Writable;
   level?: LogLevel;
   now?: () => Date;
@@ -43,15 +45,18 @@ function serialize(entry: LogFields): string {
   });
 }
 
-// Writes to stderr by default: in the stdio server, stdout carries JSON-RPC only.
-export function createLogger(options: LoggerOptions = {}): Logger {
+// Writes to stderr by default: in the stdio server, stdout carries JSON-RPC only. Each task
+// creates its own instance; there is no shared global logger.
+export function createLogger(options: LoggerOptions): Logger {
+  const service = options.service.trim();
+  if (service === '') throw new Error('Logger service name must not be empty');
   const sink = options.sink ?? process.stderr;
   const threshold = levels.indexOf(options.level ?? 'info');
   const now = options.now ?? (() => new Date());
 
   const write = (level: LogLevel, msg: string, fields: LogFields = {}): void => {
     if (levels.indexOf(level) < threshold) return;
-    const line = serialize({ ...fields, time: now().toISOString(), level, msg });
+    const line = serialize({ ...fields, service, time: now().toISOString(), level, msg });
     sink.write(`${line}\n`);
   };
 

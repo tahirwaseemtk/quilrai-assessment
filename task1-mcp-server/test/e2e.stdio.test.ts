@@ -83,7 +83,10 @@ describe('stdio server process', () => {
 
     const logs = logLines(stderrLines);
     expect(logs.length).toBeGreaterThan(0);
-    for (const line of logs) expect(JSON.parse(line)).toHaveProperty('level');
+    for (const line of logs) {
+      expect(JSON.parse(line)).toMatchObject({ service: 'task1-mcp-server' });
+      expect(JSON.parse(line)).toHaveProperty('level');
+    }
   });
 
   it('keeps answering after repeated malformed input', async () => {
@@ -301,7 +304,10 @@ describe('customer tools through the real server', () => {
 
     const logs = logLines(stderrLines);
     expect(logs.some((line) => line.includes('"refund_id":"REF-000001"'))).toBe(true);
-    for (const line of logs) expect(JSON.parse(line)).toHaveProperty('level');
+    for (const line of logs) {
+      expect(JSON.parse(line)).toMatchObject({ service: 'task1-mcp-server' });
+      expect(JSON.parse(line)).toHaveProperty('level');
+    }
     for (const line of stderrLines) {
       expect(line).not.toContain('jane.doe');
       expect(line).not.toContain('123-45-6789');
