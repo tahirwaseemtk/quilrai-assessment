@@ -1,10 +1,13 @@
 import { createMockCustomerRepository } from './src/customer-repository.js';
-import { createLogger, parseLogLevel } from './src/logger.js';
+import { createLogger, parseLogLevel } from '../shared/logger.js';
 import { createServer } from './src/server.js';
 import { createTools } from './src/tools.js';
 import { LineTransport } from './src/transport.js';
 
-const logger = createLogger({ level: parseLogLevel(process.env.LOG_LEVEL) });
+const logger = createLogger({
+  service: 'task1-mcp-server',
+  level: parseLogLevel(process.env.LOG_LEVEL),
+});
 const server = createServer({
   logger,
   tools: createTools(createMockCustomerRepository(), logger),

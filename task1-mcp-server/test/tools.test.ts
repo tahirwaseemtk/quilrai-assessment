@@ -6,7 +6,7 @@ import {
   createMockCustomerRepository,
   type CustomerRepository,
 } from '../src/customer-repository.js';
-import { createLogger } from '../src/logger.js';
+import { createLogger } from '../../shared/logger.js';
 import { GetCustomerRecordArgs, TriggerRefundArgs } from '../src/schemas.js';
 import { runTool, type ToolDefinition } from '../src/server.js';
 import { getCustomerRecordInputSchema, triggerRefundInputSchema } from '../src/tool-schemas.js';
@@ -21,7 +21,7 @@ type CallableTool = Omit<ToolDefinition, 'handler'> & {
 
 function setup(repository: CustomerRepository = createMockCustomerRepository()) {
   const sink = new CaptureSink();
-  const logger = createLogger({ sink, level: 'debug' });
+  const logger = createLogger({ service: 'test', sink, level: 'debug' });
   const tools = createTools(repository, logger);
   // Call through runTool, as the server does, so argument validation is part of every test.
   const byName = (name: string): CallableTool => {
@@ -243,7 +243,7 @@ describe('refund logging', () => {
     const entries = sink.lines().map((line) => JSON.parse(line) as Record<string, unknown>);
     expect(entries).toHaveLength(1);
     expect(Object.keys(entries[0] ?? {}).sort()).toEqual(
-      ['amount', 'customer_id', 'level', 'msg', 'refund_id', 'time'].sort(),
+      ['amount', 'customer_id', 'level', 'msg', 'refund_id', 'service', 'time'].sort(),
     );
     expect(entries[0]).toMatchObject({
       level: 'info',

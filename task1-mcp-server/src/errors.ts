@@ -1,21 +1,9 @@
 import type { JSONRPCErrorResponse, RequestId } from '@modelcontextprotocol/sdk/types.js';
+import { JsonRpcCode, JsonRpcMessage } from '../../shared/jsonrpc-errors.js';
 
-export const ErrorCode = {
-  ParseError: -32700,
-  InvalidRequest: -32600,
-  MethodNotFound: -32601,
-  InvalidParams: -32602,
-  InternalError: -32603,
-} as const;
+export const ErrorCode = JsonRpcCode;
 
-export const ErrorMessage = {
-  ParseError: 'Parse error',
-  InvalidRequest: 'Invalid Request',
-  MethodNotFound: 'Method not found',
-  InvalidParams: 'Invalid params',
-  InternalError: 'Internal error',
-  UnknownTool: 'Unknown tool',
-} as const;
+export const ErrorMessage = { ...JsonRpcMessage, UnknownTool: 'Unknown tool' } as const;
 
 const canonical = new Map<number, string>([
   [ErrorCode.ParseError, ErrorMessage.ParseError],

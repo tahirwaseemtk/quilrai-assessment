@@ -245,3 +245,20 @@ describe('classifyInbound: SDK schema parity', () => {
     expect(classifyInbound('{"jsonrpc":"2.0","id":23,"result":{"_meta":5}}')).toEqual(drop);
   });
 });
+
+describe('classifyInbound: byte order mark and non-JSON whitespace', () => {
+  const BOM = String.fromCodePoint(0xfeff);
+  const NBSP = String.fromCodePoint(0xa0);
+  const LINE_SEPARATOR = String.fromCodePoint(0x2028);
+  const pingLine = '{"jsonrpc":"2.0","id":1,"method":"ping"}';
+
+  it.each([
+    `${BOM}${BOM}${pingLine}`,
+    ` ${BOM}${pingLine}`,
+    `${NBSP}${pingLine}`,
+    `${pingLine}${NBSP}`,
+    `${LINE_SEPARATOR}${pingLine}`,
+  ])('replies -32700 for characters a JSON parser rejects: %j', (line) => {
+    expect(classifyInbound(line)).toEqual(parseError);
+  });
+});

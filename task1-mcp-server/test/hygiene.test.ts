@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { repoRoot, serverEntry } from './helpers/process.js';
 
 const taskDir = path.join(repoRoot, 'task1-mcp-server');
+// Task 1 imports the shared logger, so its stdout guarantees depend on shared/ as well.
+const sharedDir = path.join(repoRoot, 'shared');
 
 function sourceFiles(dir: string, { includeTests = false } = {}): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -20,7 +22,8 @@ describe('source encoding', () => {
   // Invisible, separator and replacement characters typed literally are unreviewable and silently lost by some editors;
   // write them as escapes or String.fromCodePoint instead.
   it('contains no literal invisible characters', () => {
-    for (const file of sourceFiles(taskDir, { includeTests: true })) {
+    const files = [taskDir, sharedDir].flatMap((dir) => sourceFiles(dir, { includeTests: true }));
+    for (const file of files) {
       expect(readFileSync(file, 'utf8'), file).not.toMatch(
         /[\p{Default_Ignorable_Code_Point}\u2028\u2029\uFFFD]/u,
       );
@@ -49,8 +52,9 @@ describe('stdout hygiene', () => {
   });
 
   it('source never writes to stdout directly', () => {
-    const files = sourceFiles(taskDir);
+    const files = [taskDir, sharedDir].flatMap((dir) => sourceFiles(dir));
     expect(files.length).toBeGreaterThan(0);
+    expect(files).toContain(path.join(sharedDir, 'logger.ts'));
     for (const file of files) {
       const text = readFileSync(file, 'utf8');
       expect(text, file).not.toMatch(/process\.stdout\.write|console\.(log|info|warn|debug)\(/);

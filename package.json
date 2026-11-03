@@ -9,8 +9,11 @@
   },
   "scripts": {
     "task1": "tsx --env-file-if-exists=.env task1-mcp-server/index.ts",
+    "task2": "tsx --env-file-if-exists=.env task2-mcp-gateway/index.ts",
+    "task2:mock": "tsx --env-file-if-exists=.env task2-mcp-gateway/mock-downstream/index.ts",
     "test": "vitest run --passWithNoTests",
     "test:task1": "vitest run task1-mcp-server",
+    "test:task2": "vitest run task2-mcp-gateway",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",
