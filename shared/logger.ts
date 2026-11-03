@@ -26,22 +26,74 @@ export function parseLogLevel(value: string | undefined): LogLevel {
   return logLevelSchema.parse(value);
 }
 
+const REDACTED = '[REDACTED]';
+const SECRET_KEYS = new Set(['cookie', 'setcookie', 'jwt', 'bearer', 'pwd', 'authheader']);
+const SECRET_PARTS = [
+  'authorization',
+  'secret',
+  'password',
+  'passwd',
+  'credential',
+  'privatekey',
+  'accesskey',
+  'session',
+];
+const SECRET_SUFFIXES = ['token', 'apikey', 'apikeys'];
+// Userinfo in a URL ("scheme://user:pass@host"); bounded classes keep this linear.
+const URL_USERINFO = /^([a-z][a-z0-9+.-]*:\/\/)[^/\s@]*@/i;
+
+type KeyKind = 'secret' | 'count' | 'plain';
+
+// A safety net, not the primary control: call sites should not log credentials at all. Keys are
+// compared lowercased without "-" or "_". A key ending in "tokens" is a usage count when its value
+// is a number (max_tokens, cache_read_input_tokens, ...) and is redacted otherwise, which catches
+// credential tables such as GATEWAY_TOKENS without hiding Task 4's counts.
+function classifyKey(key: string): KeyKind {
+  const normalized = key.toLowerCase().replace(/[-_]/g, '');
+  if (SECRET_KEYS.has(normalized)) return 'secret';
+  if (SECRET_PARTS.some((part) => normalized.includes(part))) return 'secret';
+  if (SECRET_SUFFIXES.some((suffix) => normalized.endsWith(suffix))) return 'secret';
+  return normalized.endsWith('tokens') ? 'count' : 'plain';
+}
+
+export function isSecretKey(key: string): boolean {
+  return classifyKey(key) !== 'plain';
+}
+
+const isCount = (value: unknown): boolean =>
+  (typeof value === 'number' && Number.isFinite(value)) || typeof value === 'bigint';
+
+// Name/value lists such as Node's req.rawHeaders: the value after a secret name is redacted.
+function redactPairs(list: readonly unknown[]): unknown[] {
+  return list.map((item, index) => {
+    const previous = list[index - 1];
+    return typeof previous === 'string' && isSecretKey(previous) ? REDACTED : item;
+  });
+}
+
 function serialize(entry: LogFields): string {
   // Only objects on the current path count as circular; a shared object is logged in full.
-  const ancestors: unknown[] = [];
-  return JSON.stringify(entry, function (this: unknown, _key, value: unknown) {
+  // Each ancestor keeps the original object (for cycle detection) and the object actually
+  // serialized in its place (JSON.stringify's `this` for its children).
+  const ancestors: { original: unknown; serialized: unknown }[] = [];
+  return JSON.stringify(entry, function (this: unknown, key, value: unknown) {
+    const kind = classifyKey(key);
+    if (kind === 'secret' || (kind === 'count' && !isCount(value))) return REDACTED;
     if (typeof value === 'bigint') return value.toString();
+    if (typeof value === 'string') return value.replace(URL_USERINFO, `$1${REDACTED}@`);
     if (typeof value !== 'object' || value === null) return value;
 
-    while (ancestors.length > 0 && ancestors.at(-1) !== this) ancestors.pop();
-    if (ancestors.includes(value)) return '[Circular]';
+    while (ancestors.length > 0 && ancestors.at(-1)?.serialized !== this) ancestors.pop();
+    if (ancestors.some((ancestor) => ancestor.original === value)) return '[Circular]';
 
-    const replaced =
+    const serialized =
       value instanceof Error
         ? { name: value.name, message: value.message, stack: value.stack, cause: value.cause }
-        : value;
-    ancestors.push(replaced);
-    return replaced;
+        : Array.isArray(value)
+          ? redactPairs(value)
+          : value;
+    ancestors.push({ original: value, serialized });
+    return serialized;
   });
 }
 
@@ -56,7 +108,14 @@ export function createLogger(options: LoggerOptions): Logger {
 
   const write = (level: LogLevel, msg: string, fields: LogFields = {}): void => {
     if (levels.indexOf(level) < threshold) return;
-    const line = serialize({ ...fields, service, time: now().toISOString(), level, msg });
+    const time = now().toISOString();
+    let line: string;
+    try {
+      line = serialize({ ...fields, service, time, level, msg });
+    } catch {
+      // Logging must never throw, least of all on an error path; no field content is kept.
+      line = JSON.stringify({ service, time, level, msg, log_error: 'unserializable fields' });
+    }
     sink.write(`${line}\n`);
   };
 

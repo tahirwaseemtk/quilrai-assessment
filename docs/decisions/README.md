@@ -22,6 +22,7 @@ One file per decision, named `NNN-short-title.md`. Source is `[Spec]` when the a
 | [016](016-field-level-invalid-params.md)    | Field-level Invalid params messages                    | Spec + Decided | Accepted |
 | [017](017-shared-logger-service-tagging.md) | Shared stderr logger with per-service tagging          | Decided        | Accepted |
 | [018](018-mock-downstream-mcp-server.md)    | Mock downstream MCP server                             | Spec + Decided | Accepted |
+| [019](019-gateway-client-auth.md)           | Gateway client authentication and role config          | Spec + Decided | Accepted |
 
 ## Template
 

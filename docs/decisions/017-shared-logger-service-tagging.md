@@ -19,6 +19,13 @@ Task 1 introduced a stderr JSON logger. Task 2 needs the same logger for the gat
   | Task 2 mock downstream | `mock-downstream`   |
 
 - `service`, `time`, `level` and `msg` are written last, so caller fields cannot overwrite them.
+- **Redaction:** keys are compared lowercased without `-` or `_`.
+  - Always redacted (`[REDACTED]`) when the key is `cookie`, `set-cookie`, `jwt`, `bearer`, `pwd` or `authheader`; contains `authorization`, `secret`, `password`, `passwd`, `credential`, `privatekey`, `accesskey` or `session`; or ends with `token`, `apikey` or `apikeys`.
+  - A key ending in `tokens` is a usage count when its value is a number and is kept (`max_tokens`, `cache_read_input_tokens`, ...). Any other value is redacted, which catches credential tables such as `GATEWAY_TOKENS` without hiding Task 4's counts.
+  - It applies at any depth, inside arrays and inside error causes. In name/value lists such as Node's `req.rawHeaders`, the value after a secret name is redacted.
+  - Credentials in URLs (`scheme://user:pass@host`) are masked in every string value.
+  - Known limitations: the message text and error messages are not scanned, so call sites must never interpolate credentials; lookalike Unicode keys are not normalized.
+- **Never throws:** if fields cannot be serialized (a recursive `toJSON`, a throwing getter), the logger writes a fixed line with `log_error: "unserializable fields"` and no field content. Logging sits on error paths, where a throw would replace a sanitized response.
 - Each task creates its own logger instance. There is no global logger, so one task's level or sink never affects another.
 
 ## Alternatives considered
