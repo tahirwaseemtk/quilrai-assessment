@@ -395,3 +395,52 @@ describe('createMockDownstream: streaming mode', () => {
     expect(response.text).toMatch(/^event: message/m);
   });
 });
+
+describe('createMockDownstream: raw request targets and headers', () => {
+  // fetch normalizes request targets, so these go through http.request unmodified.
+  function rawRequest(
+    url: string,
+    path: string,
+    headers: Record<string, string>,
+  ): Promise<{ status: number; body: string }> {
+    const { port } = new URL(url);
+    return new Promise((resolve, reject) => {
+      const req = http.request(
+        { host: '127.0.0.1', port, path, method: 'POST', headers },
+        (res) => {
+          let body = '';
+          res.on('data', (chunk: Buffer) => (body += chunk.toString('utf8')));
+          res.on('end', () => resolve({ status: res.statusCode ?? 0, body }));
+        },
+      );
+      req.on('error', reject);
+      req.end(JSON.stringify(rpc(1, 'tools/list')));
+    });
+  }
+
+  const mcpHeaders = {
+    accept: 'application/json, text/event-stream',
+    'content-type': 'application/json',
+  };
+
+  it.each(['//evil/mcp', 'http://[/mcp', '/mcp/../mcp', '/%6dcp'])(
+    'answers 404 (never 500) for the request target %s',
+    async (path) => {
+      const sink = new CaptureSink();
+      const { mock, url } = await start({ sink });
+      const response = await rawRequest(url, path, { ...mcpHeaders, ...bearer(TOKEN) });
+      expect(response.status).toBe(404);
+      expect(mock.calls).toEqual([]);
+      expect(sink.chunks.join('')).not.toContain('"level":"error"');
+    },
+  );
+
+  it('relies on Node trimming whitespace around the Authorization value', async () => {
+    const { url } = await start();
+    const response = await rawRequest(url, '/mcp', {
+      ...mcpHeaders,
+      authorization: `Bearer ${TOKEN}   `,
+    });
+    expect(response.status).toBe(200);
+  });
+});

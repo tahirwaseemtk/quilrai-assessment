@@ -9,7 +9,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import type { Logger } from '../../shared/logger.js';
-import { hasBearerToken } from '../src/bearer.js';
+import { hasBearerToken, isValidTokenSyntax } from '../src/bearer.js';
 
 export interface ToolCallRecord {
   name: string;
@@ -43,27 +43,45 @@ class MockRpcError extends Error {
   }
 }
 
+interface MockTool {
+  name: string;
+  description: string;
+  args: z.ZodType;
+  run: (input: unknown) => unknown;
+}
+
+// Keeps each handler typed against its own schema; the cast is sound because every call is
+// parsed with that same schema before run() is invoked.
+function mockTool<S extends z.ZodType>(tool: {
+  name: string;
+  description: string;
+  args: S;
+  run: (input: z.output<S>) => unknown;
+}): MockTool {
+  return tool as MockTool;
+}
+
 const emptyArgs = z.strictObject({});
-const tools = [
-  {
+const tools: readonly MockTool[] = [
+  mockTool({
     name: 'get_status',
     description: 'Report service status.',
     args: emptyArgs,
     run: () => ({ status: 'ok' }),
-  },
-  {
+  }),
+  mockTool({
     name: 'admin_reset_key',
     description: 'Reset an API key (admin only behind the gateway).',
     args: z.strictObject({ key_id: z.string().min(1) }),
-    run: (input: { key_id: string }) => ({ reset: true, key_id: input.key_id }),
-  },
-  {
+    run: (input) => ({ reset: true, key_id: input.key_id }),
+  }),
+  mockTool({
     name: 'admin',
     description: 'Administrative entry point (admin only behind the gateway).',
     args: emptyArgs,
     run: () => ({ admin: true }),
-  },
-] as const;
+  }),
+];
 
 function createMcpServer(calls: ToolCallRecord[]): Server {
   const server = new Server(
@@ -82,7 +100,7 @@ function createMcpServer(calls: ToolCallRecord[]): Server {
     if (!tool) throw new MockRpcError(-32602, 'Unknown tool');
     const parsed = tool.args.safeParse(request.params.arguments ?? {});
     if (!parsed.success) throw new MockRpcError(-32602, 'Invalid params');
-    const result = (tool.run as (input: unknown) => unknown)(parsed.data);
+    const result = tool.run(parsed.data);
     // Recorded only after the tool ran, so tests can assert "the downstream executed nothing".
     calls.push(structuredClone({ name: tool.name, arguments: parsed.data }));
     return { content: [{ type: 'text', text: JSON.stringify(result) }] };
@@ -93,12 +111,16 @@ function createMcpServer(calls: ToolCallRecord[]): Server {
 // A real MCP server over Streamable HTTP (stateless, one transport per request, as the SDK
 // requires), standing in for the service behind the gateway in tests and demos.
 export function createMockDownstream(options: MockDownstreamOptions): MockDownstream {
-  if (options.authToken.trim() === '') throw new Error('authToken must be a non-empty string');
+  if (!isValidTokenSyntax(options.authToken)) {
+    throw new Error('authToken must be a non-empty RFC 6750 token');
+  }
   const { authToken, logger, jsonResponse = true } = options;
   const calls: ToolCallRecord[] = [];
 
   const handle = async (req: http.IncomingMessage, res: http.ServerResponse): Promise<void> => {
-    const { pathname } = new URL(req.url ?? '/', 'http://localhost');
+    // The raw request-target, not new URL(): URL parsing reads "//host/mcp" as a host and
+    // throws on targets such as "http://[/mcp", which would turn a 404 into a 500.
+    const pathname = (req.url ?? '').split('?')[0];
     if (pathname !== PATH) {
       res.writeHead(404, { 'content-type': 'text/plain' }).end('Not Found');
       return;

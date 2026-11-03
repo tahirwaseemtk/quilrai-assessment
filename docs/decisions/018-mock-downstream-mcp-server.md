@@ -17,8 +17,8 @@ The gateway sits between an agent client and a downstream MCP server. Its tests 
   - `admin_reset_key` (requires a `key_id` string) and `admin` are the admin-only tools the gateway must gate.
   - Arguments are strict: bad arguments give `-32602 "Invalid params"`, and an unknown tool gives `-32602 "Unknown tool"`, matching Task 1.
 - **Downstream credential:** the mock accepts only `Authorization: Bearer <DOWNSTREAM_AUTH_TOKEN>`. That is the gateway's own credential, never a client token. Anything else gets `401 Unauthorized` with `WWW-Authenticate: Bearer`, checked before the body is read.
-  - Checks run in this order: path (404), method (405 for anything but POST), credential (401), then MCP.
-  - The bearer scheme is case-insensitive (RFC 7235); the token is compared in constant time (`src/bearer.ts`, shared with the gateway).
+  - Checks run in this order: path (404), method (405 for anything but POST), credential (401), then MCP. The path is compared on the raw request-target, not via `new URL()`, which reads `//host/mcp` as a host and throws on targets such as `http://[/mcp` (turning a 404 into a 500).
+  - The bearer scheme is case-insensitive (RFC 7235). Tokens must use the RFC 6750 `token68` characters, both in the header and in `DOWNSTREAM_AUTH_TOKEN` (checked at startup, so a token that could never match fails fast). Comparison is constant time over SHA-256 digests (`src/bearer.ts`, shared with the gateway). Node trims whitespace around header values before this check.
 - **Call spy:** `calls` lists the tools that actually ran, in order. A call is recorded after the tool succeeds, as a snapshot. `initialize`, `tools/list` and failed calls are not recorded.
 - **Entry point:** `npm run task2:mock`. `MOCK_DOWNSTREAM_PORT` defaults to 8081 and `DOWNSTREAM_AUTH_TOKEN` is required. A missing token exits with code 1 and logs only the names of the invalid settings.
 

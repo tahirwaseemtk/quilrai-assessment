@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { hasBearerToken, parseBearerToken, tokensMatch } from '../src/bearer.js';
+import {
+  hasBearerToken,
+  isValidTokenSyntax,
+  parseBearerToken,
+  tokensMatch,
+} from '../src/bearer.js';
 
 const cyrillicDze = String.fromCodePoint(0x455);
 
@@ -54,4 +59,22 @@ describe('hasBearerToken', () => {
     expect(hasBearerToken('Bearer s3cret ', 's3cret')).toBe(false);
     expect(hasBearerToken(undefined, 's3cret')).toBe(false);
   });
+});
+
+describe('token68 grammar', () => {
+  const zeroWidth = String.fromCodePoint(0x200b);
+  const nbsp = String.fromCodePoint(0xa0);
+
+  it.each(['abc', 'a.b_c~d+e/f-g', 'dG9rZW4=', 'dG9r=='])('accepts token %j', (token) => {
+    expect(isValidTokenSyntax(token)).toBe(true);
+    expect(parseBearerToken(`Bearer ${token}`)).toBe(token);
+  });
+
+  it.each([`t${zeroWidth}ok`, `tok${nbsp}`, `${cyrillicDze}3cret`, 'to=k', 'tok;x', 'tok"', ''])(
+    'rejects token %j at parse time',
+    (token) => {
+      expect(isValidTokenSyntax(token)).toBe(false);
+      expect(parseBearerToken(`Bearer ${token}`)).toBeUndefined();
+    },
+  );
 });

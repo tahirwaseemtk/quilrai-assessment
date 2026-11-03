@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isValidTokenSyntax } from '../src/bearer.js';
 
 export interface MockConfig {
   port: number;
@@ -17,7 +18,7 @@ const schema = z.object({
     blankToUndefined,
     z.coerce.number().int().min(0).max(65_535).default(8081),
   ),
-  DOWNSTREAM_AUTH_TOKEN: z.string().trim().min(1),
+  DOWNSTREAM_AUTH_TOKEN: z.string().refine(isValidTokenSyntax),
 });
 
 export function parseMockConfig(env: Record<string, string | undefined>): MockConfigResult {

@@ -36,3 +36,15 @@ describe('parseMockConfig', () => {
     });
   });
 });
+
+describe('parseMockConfig: token syntax', () => {
+  it.each(['a b', `tok${String.fromCodePoint(0x200b)}`, 'tok;x'])(
+    'rejects a token that could never match a Bearer header: %j',
+    (token) => {
+      expect(parseMockConfig({ DOWNSTREAM_AUTH_TOKEN: token })).toEqual({
+        ok: false,
+        fields: ['DOWNSTREAM_AUTH_TOKEN'],
+      });
+    },
+  );
+});
