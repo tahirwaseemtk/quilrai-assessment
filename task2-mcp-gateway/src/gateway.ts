@@ -6,7 +6,7 @@ import { authenticate } from './auth.js';
 import { authorize } from './authorize.js';
 import { isJsonContentType } from './content-type.js';
 import { classifyBody, type ClassifiedBody } from './envelope.js';
-import { CLIENT_CLOSED, forwardRequest } from './forward.js';
+import { CLIENT_CLOSED, forwardRequest, MAX_RELAY_BYTES } from './forward.js';
 import { decodeUtf8, MAX_BODY_BYTES, readBody, withoutByteOrderMark } from './read-body.js';
 import { sendJson, sendText } from './responses.js';
 import { RpcCode, rpcError, type RpcCodeValue, type RpcErrorResponse } from './rpc-errors.js';
@@ -18,6 +18,9 @@ export interface GatewayOptions {
   downstreamUrl: string;
   downstreamToken: string;
   timeoutMs: number;
+  idleTimeoutMs: number;
+  // Tests lower the cap; production uses MAX_RELAY_BYTES.
+  maxResponseBytes?: number;
   logger: Logger;
 }
 
@@ -64,6 +67,8 @@ export function createGateway(options: GatewayOptions): Gateway {
     url: options.downstreamUrl,
     token: options.downstreamToken,
     timeoutMs: options.timeoutMs,
+    idleTimeoutMs: options.idleTimeoutMs,
+    maxBytes: options.maxResponseBytes ?? MAX_RELAY_BYTES,
   };
 
   // Each step answers or passes on; the order is part of the contract (cheap checks first, no

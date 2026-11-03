@@ -1,6 +1,5 @@
 import type http from 'node:http';
 import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import type { RequestId } from '../../shared/jsonrpc-envelope.js';
 import type { Logger } from '../../shared/logger.js';
@@ -11,6 +10,8 @@ export interface DownstreamTarget {
   url: string;
   token: string;
   timeoutMs: number;
+  idleTimeoutMs: number;
+  maxBytes: number;
 }
 
 export interface ForwardRequest {
@@ -22,6 +23,10 @@ export interface ForwardRequest {
   target: DownstreamTarget;
   logger: Logger;
 }
+
+// A relayed body larger than this is cut: the gateway never buffers more than this, and a runaway
+// downstream cannot fill the client's connection indefinitely.
+export const MAX_RELAY_BYTES = 4 * 1024 * 1024;
 
 // Status for the request log line when the client left before the response was finished.
 export const CLIENT_CLOSED = 499;
@@ -52,6 +57,30 @@ function responseHeaders(headers: Headers): Record<string, string> {
   return relayed;
 }
 
+// A relayed body that stops for longer than the idle timeout, or grows past MAX_RELAY_BYTES, ends
+// the response. After headers are sent the status cannot change, so the connection is destroyed.
+type RelayFailure = 'idle' | 'too-large' | 'write-stall' | 'downstream';
+
+// A client that stops reading must not pin the downstream connection for ever.
+export const WRITE_STALL_MS = 30_000;
+
+// Resolves true once the client has drained, false if it closed or stalled too long.
+function waitForDrain(res: http.ServerResponse, stallMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const finish = (drained: boolean) => {
+      clearTimeout(stall);
+      res.off('drain', onDrain);
+      res.off('close', onClose);
+      resolve(drained);
+    };
+    const onDrain = () => finish(true);
+    const onClose = () => finish(false);
+    const stall = setTimeout(() => finish(false), stallMs);
+    res.once('drain', onDrain);
+    res.once('close', onClose);
+  });
+}
+
 // Only a short code (ECONNREFUSED, UND_ERR_SOCKET, ...) is logged: undici's messages and causes
 // can carry the downstream URL.
 function errorCode(error: unknown): string {
@@ -65,6 +94,52 @@ function errorCode(error: unknown): string {
 
 const sendInternalError = (res: http.ServerResponse, id: RequestId | null): number =>
   sendJson(res, 502, rpcError(id, RpcCode.InternalError));
+
+// Writes the downstream body to the client chunk by chunk, honouring backpressure. Returns the
+// reason the stream was cut, or undefined when it ended normally.
+async function relayBody(
+  source: AsyncIterable<Uint8Array>,
+  res: http.ServerResponse,
+  controller: AbortController,
+  idleTimeoutMs: number,
+  maxBytes: number,
+): Promise<RelayFailure | undefined> {
+  let failure: RelayFailure | undefined;
+  let total = 0;
+  const cut = (reason: RelayFailure) => {
+    failure ??= reason;
+    controller.abort();
+  };
+  let idle: NodeJS.Timeout | undefined;
+  // The idle timer runs only while the gateway waits for the downstream, never while the client
+  // is slow to read: a slow reader is not a stalled downstream.
+  const arm = () => {
+    clearTimeout(idle);
+    idle = setTimeout(() => cut('idle'), idleTimeoutMs);
+  };
+  arm();
+  try {
+    for await (const chunk of source) {
+      clearTimeout(idle);
+      total += chunk.byteLength;
+      if (total > maxBytes) {
+        cut('too-large');
+        break;
+      }
+      if (!res.write(chunk) && !(await waitForDrain(res, WRITE_STALL_MS))) {
+        cut(res.destroyed ? 'downstream' : 'write-stall');
+        break;
+      }
+      arm();
+    }
+  } catch {
+    failure ??= 'downstream';
+  } finally {
+    clearTimeout(idle);
+  }
+  if (failure === undefined) res.end();
+  return failure;
+}
 
 // Forwards one request and relays the response, streaming the body (JSON or SSE) without
 // buffering it. Returns the status for the request log.
@@ -125,6 +200,23 @@ export async function forwardRequest({
       return sendInternalError(res, id);
     }
 
+    // A downstream failure page (HTML, a stack trace, a JSON-RPC error on a 5xx) is never relayed:
+    // it may carry internals, and the client needs only the sanitized answer.
+    if (response.status >= 500) {
+      await response.body?.cancel().catch(() => undefined);
+      logger.error('downstream server error', { downstream_status: response.status });
+      return sendInternalError(res, id);
+    }
+
+    // A declared length over the cap is refused before any byte is relayed, so the status is still
+    // free to be the sanitized 502.
+    const declared = Number(response.headers.get('content-length') ?? NaN);
+    if (declared > target.maxBytes) {
+      await response.body?.cancel().catch(() => undefined);
+      logger.error('downstream body too large', { downstream_status: response.status });
+      return sendInternalError(res, id);
+    }
+
     res.writeHead(response.status, responseHeaders(response.headers));
     // An SSE stream may wait before its first event; the client should see the status meanwhile.
     res.flushHeaders();
@@ -133,16 +225,16 @@ export async function forwardRequest({
       return response.status;
     }
     const source = Readable.fromWeb(response.body as WebReadableStream<Uint8Array>);
-    // Registered before pipeline() so it runs before pipeline destroys the response, letting
-    // onClose tell a downstream failure from a client disconnect.
+    // Registered before the relay so it runs before the response is destroyed, letting onClose
+    // tell a downstream failure from a client disconnect.
     source.once('error', () => {
       if (!clientClosed) downstreamFailed = true;
     });
-    try {
-      await pipeline(source, res);
-    } catch (error) {
-      if (clientClosed) return CLIENT_CLOSED;
-      logger.warn('downstream stream failed', { error_code: errorCode(error) });
+    const failure = await relayBody(source, res, controller, target.idleTimeoutMs, target.maxBytes);
+    if (clientClosed) return CLIENT_CLOSED;
+    if (failure !== undefined) {
+      logger.warn('downstream stream ended early', { reason: failure });
+      res.destroy();
     }
     return response.status;
   } finally {

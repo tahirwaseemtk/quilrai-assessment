@@ -21,6 +21,7 @@ const gateway = createGateway({
   downstreamUrl: config.downstreamUrl,
   downstreamToken: config.downstreamToken,
   timeoutMs: config.timeoutMs,
+  idleTimeoutMs: config.idleTimeoutMs,
   logger,
 });
 try {
