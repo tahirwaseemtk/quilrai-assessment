@@ -27,6 +27,8 @@ One file per decision, named `NNN-short-title.md`. Source is `[Spec]` when the a
 | [021](021-gateway-http-layer.md)              | Gateway HTTP layer and passthrough proxy                     | Spec + Decided | Accepted |
 | [022](022-gateway-admin-gate.md)              | Gateway admin gate and tool-name check                       | Spec + Decided | Accepted |
 | [023](023-gateway-downstream-failures.md)     | Gateway downstream failure handling                          | Spec + Decided | Accepted |
+| [024](024-streaming-redaction-holdback.md)    | Streaming PII redaction with a prefix-aware holdback         | Spec + Decided | Accepted |
+| [025](025-redaction-detection-limits.md)      | Redaction detection limits and known misses                  | Spec + Decided | Accepted |
 
 ## Template
 
