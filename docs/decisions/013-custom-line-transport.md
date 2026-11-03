@@ -22,6 +22,7 @@ The stock transport also closes itself when its read buffer exceeds 10 MB, which
 
 - Newline framing on raw bytes, so multibyte characters split across chunks decode correctly. A trailing `\r` is stripped, blank lines are ignored, and invalid UTF-8 is replaced (U+FFFD) rather than rejected.
 - Each line is classified by the pure function `classifyInbound`:
+  - The generic envelope checks live in `shared/jsonrpc-envelope.ts` (ADR 020), shared with the Task 2 gateway; `classifyInbound` maps them to Task 1's replies. Only one leading BOM is stripped before parsing.
   - Malformed JSON gets `-32700` with `id: null`.
   - An invalid envelope or a batch gets `-32600`, echoing the id when it is a valid MCP id.
   - Invalid `tools/call` params get `-32602 "Invalid params"`.

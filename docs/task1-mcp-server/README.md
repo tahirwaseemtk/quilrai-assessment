@@ -80,7 +80,7 @@ stderr ◄─ createLogger (JSON lines)
 
 - **Low-level SDK `Server`** ([ADR 012](../decisions/012-low-level-server-rpc-errors.md)): handlers throw `RpcError` with a numeric code and an exact message. `McpServer` would turn invalid input into `isError` results, and `McpError` prefixes messages.
 - **Custom `LineTransport`** ([ADR 013](../decisions/013-custom-line-transport.md)): the stock stdio transport never replies to malformed input and closes on oversize input.
-- **Inbound classification** (`src/inbound.ts`): a pure function per line.
+- **Inbound classification** (`src/inbound.ts`): a pure function per line, built on the envelope checks shared with Task 2 (`shared/jsonrpc-envelope.ts`, ADR 020). Only one leading byte order mark is stripped; JSON whitespace is handled by `JSON.parse`, so NBSP or U+2028 around a message is a parse error.
   - Malformed JSON gets `-32700` with `id: null`.
   - An invalid envelope or a batch gets `-32600`, with the id echoed only when it is a valid MCP id (string or safe integer).
   - Invalid params get `-32602 "Invalid params"`. Every message must also pass the SDK's own `JSONRPCMessageSchema`, and `initialize`, `ping`, `tools/list` and `tools/call` are checked against the SDK request schemas first. Otherwise the SDK would drop the request unanswered (for example a non-object `params._meta`), answer `-32603`, or leak Zod text.
