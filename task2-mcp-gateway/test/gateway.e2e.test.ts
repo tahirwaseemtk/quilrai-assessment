@@ -155,3 +155,37 @@ describe('npm run task2 entry', () => {
     expect(stderr).not.toMatch(/\bat \S+:\d+/);
   });
 });
+
+describe('npm run task2 entry: admin gate', () => {
+  it('denies a viewer the admin tool, lets an admin through, and keeps secrets out of stderr', async () => {
+    const mock = createMockDownstream({
+      authToken: DT,
+      logger: createLogger({ service: 'mock-downstream', sink: new CaptureSink() }),
+    });
+    mocks.push(mock);
+    const gateway = spawnGateway({ DOWNSTREAM_MCP_URL: (await mock.listen()).url });
+    const listening = await waitFor(() =>
+      gateway.logLines().find((line) => line.msg === 'listening'),
+    );
+    const url = `http://127.0.0.1:${listening.port as number}/mcp`;
+    const call = (token: string, id: number, name: string) =>
+      postRpc(url, { jsonrpc: '2.0', id, method: 'tools/call', params: { name } }, bearer(token));
+
+    const denied = await call(VIEWER, 1, 'admin');
+    expect(denied.json).toEqual({
+      jsonrpc: '2.0',
+      id: 1,
+      error: { code: -32001, message: 'Unauthorized Tool Call' },
+    });
+    expect(mock.calls).toEqual([]);
+
+    expect(JSON.stringify((await call(ADMIN, 2, 'admin')).json)).toContain('admin');
+    expect(JSON.stringify((await call(VIEWER, 3, 'get_status')).json)).toContain('ok');
+    expect(mock.calls.map((record) => record.name)).toEqual(['admin', 'get_status']);
+
+    const { stdout, stderr } = gateway.output();
+    expect(stdout).toBe('');
+    for (const secret of [ADMIN, VIEWER, DT]) expect(stderr).not.toContain(secret);
+    expect(stderr).not.toContain('admin_reset_key');
+  });
+});

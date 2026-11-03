@@ -3,13 +3,15 @@ import type { AddressInfo } from 'node:net';
 import type { RequestId } from '../../shared/jsonrpc-envelope.js';
 import type { Logger } from '../../shared/logger.js';
 import { authenticate } from './auth.js';
+import { authorize } from './authorize.js';
 import { isJsonContentType } from './content-type.js';
 import { classifyBody, type ClassifiedBody } from './envelope.js';
 import { CLIENT_CLOSED, forwardRequest } from './forward.js';
 import { decodeUtf8, MAX_BODY_BYTES, readBody, withoutByteOrderMark } from './read-body.js';
 import { sendJson, sendText } from './responses.js';
-import { RpcCode, rpcError, type RpcErrorResponse } from './rpc-errors.js';
-import type { TokenTable } from './token-config.js';
+import { RpcCode, rpcError, type RpcCodeValue, type RpcErrorResponse } from './rpc-errors.js';
+import { isValidToolName } from './tool-name.js';
+import type { Role, TokenTable } from './token-config.js';
 
 export interface GatewayOptions {
   table: TokenTable;
@@ -50,6 +52,12 @@ function idOf(classified: ClassifiedBody): RequestId | null {
   return classified.kind === 'tool-call' || classified.kind === 'request' ? classified.id : null;
 }
 
+// The name check comes first: a name the gate cannot judge reliably is refused, not guessed at.
+function refuseToolCall(role: Role, toolName: string): RpcCodeValue | undefined {
+  if (!isValidToolName(toolName)) return RpcCode.InvalidParams;
+  return authorize(role, toolName) === 'deny' ? RpcCode.UnauthorizedToolCall : undefined;
+}
+
 export function createGateway(options: GatewayOptions): Gateway {
   const { table, logger } = options;
   const target = {
@@ -72,7 +80,8 @@ export function createGateway(options: GatewayOptions): Gateway {
       return sendText(req, res, 405, 'Method Not Allowed', { allow: 'POST' });
     }
     // One response for every failure reason, so the reason never leaks.
-    if (!authenticate(req.headersDistinct.authorization, table).ok) {
+    const auth = authenticate(req.headersDistinct.authorization, table);
+    if (!auth.ok) {
       return sendText(req, res, 401, 'Unauthorized', { 'www-authenticate': 'Bearer' });
     }
     if (!isJsonContentType(req.headersDistinct['content-type'])) {
@@ -109,6 +118,14 @@ export function createGateway(options: GatewayOptions): Gateway {
     if (classified.kind === 'drop') {
       res.writeHead(202).end();
       return 202;
+    }
+
+    if (classified.kind === 'tool-call') {
+      const refusal = refuseToolCall(auth.role, classified.toolName);
+      if (refusal !== undefined) {
+        const response = rpcError(classified.id, refusal);
+        return sendJson(res, replyStatus(response), response);
+      }
     }
 
     return forwardRequest({
