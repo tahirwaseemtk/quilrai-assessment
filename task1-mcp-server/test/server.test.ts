@@ -12,7 +12,7 @@ import {
 } from '../src/customer-repository.js';
 import { RpcError } from '../src/errors.js';
 import { ArgumentMessage } from '../src/field-errors.js';
-import { createLogger } from '../src/logger.js';
+import { createLogger } from '../../shared/logger.js';
 import { createServer, defineTool, type ToolDefinition } from '../src/server.js';
 import { getCustomerRecordInputSchema, triggerRefundInputSchema } from '../src/tool-schemas.js';
 import { createTools } from '../src/tools.js';
@@ -22,7 +22,7 @@ const serverInfo = { name: 'test-server', version: '9.9.9' };
 
 async function connect(tools: ToolDefinition[] = []) {
   const logSink = new CaptureSink();
-  const logger = createLogger({ sink: logSink, level: 'debug' });
+  const logger = createLogger({ service: 'test', sink: logSink, level: 'debug' });
   const server = createServer({ logger, tools, info: serverInfo });
   const harness = createHarness();
   await server.connect(harness.transport);
@@ -160,7 +160,7 @@ describe('createServer', () => {
 
 describe('registered tools', () => {
   const mockTools = (repository: CustomerRepository = createMockCustomerRepository()) =>
-    createTools(repository, createLogger({ sink: new CaptureSink() }));
+    createTools(repository, createLogger({ service: 'test', sink: new CaptureSink() }));
   const callTool = (id: number, name: string, args?: unknown) => ({
     id,
     method: 'tools/call',
@@ -326,7 +326,7 @@ describe('registered tools', () => {
   it('cannot overdraw with pipelined refunds', async () => {
     const harness = createHarness();
     const server = createServer({
-      logger: createLogger({ sink: new CaptureSink() }),
+      logger: createLogger({ service: 'test', sink: new CaptureSink() }),
       tools: mockTools(),
       info: serverInfo,
     });

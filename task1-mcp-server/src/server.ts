@@ -8,7 +8,7 @@ import {
 import type { z } from 'zod';
 import { ErrorCode, ErrorMessage, RpcError } from './errors.js';
 import { describeArgumentIssues, type ArgumentField } from './field-errors.js';
-import type { Logger } from './logger.js';
+import type { Logger } from '../../shared/logger.js';
 
 type ToolResult = CallToolResult | Promise<CallToolResult>;
 

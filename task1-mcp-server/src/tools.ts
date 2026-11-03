@@ -1,7 +1,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { CustomerRepository, RefundFailure } from './customer-repository.js';
 import { ArgumentMessage, type ArgumentField } from './field-errors.js';
-import type { Logger } from './logger.js';
+import type { Logger } from '../../shared/logger.js';
 import { GetCustomerRecordArgs, TriggerRefundArgs } from './schemas.js';
 import { defineTool, type ToolDefinition } from './server.js';
 import { getCustomerRecordInputSchema, triggerRefundInputSchema } from './tool-schemas.js';
